@@ -1,0 +1,1110 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#fff5f8">
+<title>Lumi</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --pink:#ff6b9d;
+  --pink-light:#fff0f5;
+  --pink-soft:#ffe4ef;
+  --gold:#c9a227;
+  --gold-light:#f5e6c8;
+  --gold-dark:#a67c00;
+  --white:#ffffff;
+  --text:#3d2c35;
+  --text-muted:#9a8490;
+  --shadow:0 4px 24px rgba(255,107,157,.12);
+  --shadow-sm:0 2px 12px rgba(255,107,157,.08);
+  --radius:20px;
+  --radius-sm:14px;
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+  --tab-h:64px;
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  background:linear-gradient(165deg,#fffafc 0%,#fff0f5 40%,#fdf8ee 100%);
+  color:var(--text);
+  min-height:100dvh;
+  overflow-x:hidden;
+}
+.app{
+  max-width:430px;
+  margin:0 auto;
+  min-height:100dvh;
+  padding-bottom:calc(var(--tab-h) + var(--safe-bottom) + 12px);
+}
+.header{
+  padding:52px 20px 16px;
+  text-align:center;
+  background:linear-gradient(180deg,rgba(255,255,255,.95) 0%,transparent 100%);
+  position:sticky;top:0;z-index:10;
+}
+.logo{
+  font-size:28px;font-weight:700;letter-spacing:.08em;
+  background:linear-gradient(135deg,var(--pink),var(--gold));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.logo-sub{font-size:11px;color:var(--text-muted);margin-top:2px;letter-spacing:.15em}
+.screen{display:none;padding:0 16px 20px;animation:fadeIn .3s ease}
+.screen.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.card{
+  background:var(--white);
+  border-radius:var(--radius);
+  padding:18px 20px;
+  margin-bottom:14px;
+  box-shadow:var(--shadow-sm);
+  border:1px solid rgba(255,107,157,.06);
+  position:relative;overflow:hidden;
+}
+.card::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--pink),var(--gold));
+  opacity:.6;
+}
+.card-title{
+  font-size:12px;color:var(--text-muted);letter-spacing:.1em;
+  text-transform:uppercase;margin-bottom:8px;font-weight:600;
+}
+.card-value{
+  font-size:36px;font-weight:700;
+  background:linear-gradient(135deg,var(--pink),#ff8fb3);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;line-height:1.1;
+}
+.card-value.gold{
+  background:linear-gradient(135deg,var(--gold-dark),var(--gold));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.card-value.sm{font-size:28px}
+.card-note{font-size:13px;color:var(--text-muted);margin-top:6px}
+.card-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(0,0,0,.04)}
+.card-row:last-child{border-bottom:none}
+.card-row-label{font-size:14px;color:var(--text-muted)}
+.card-row-value{font-size:16px;font-weight:600;color:var(--text)}
+.card-row-value.highlight{color:var(--pink);font-size:18px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid-2 .card{margin-bottom:0;padding:16px}
+.grid-2 .card-value{font-size:28px}
+.section-title{font-size:15px;font-weight:700;margin:20px 0 12px;color:var(--text);display:flex;align-items:center;gap:8px}
+.section-title::before{content:"";width:4px;height:16px;background:linear-gradient(var(--pink),var(--gold));border-radius:2px}
+.tab-bar{
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:430px;
+  background:rgba(255,255,255,.92);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-top:1px solid rgba(255,107,157,.1);
+  display:flex;justify-content:space-around;align-items:center;
+  height:calc(var(--tab-h) + var(--safe-bottom));
+  padding-bottom:var(--safe-bottom);
+  z-index:100;
+}
+.tab-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;padding:8px 0;cursor:pointer;border:none;background:none;
+  color:var(--text-muted);font-size:10px;font-weight:600;letter-spacing:.05em;
+  transition:color .2s;-webkit-tap-highlight-color:transparent;
+}
+.tab-item svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tab-item.active{color:var(--pink)}
+.tab-item.active svg{stroke:var(--pink);fill:rgba(255,107,157,.12)}
+textarea{
+  width:100%;min-height:140px;border:1.5px solid rgba(255,107,157,.15);
+  border-radius:var(--radius-sm);padding:14px;font-size:14px;line-height:1.6;
+  resize:vertical;background:var(--pink-light);color:var(--text);
+  font-family:inherit;outline:none;transition:border-color .2s;
+}
+textarea:focus{border-color:var(--pink)}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:14px 24px;border:none;border-radius:var(--radius-sm);
+  font-size:15px;font-weight:600;cursor:pointer;
+  transition:transform .15s,box-shadow .15s;-webkit-tap-highlight-color:transparent;
+  font-family:inherit;width:100%;
+}
+.btn:active{transform:scale(.97)}
+.btn-primary{
+  background:linear-gradient(135deg,var(--pink),#ff8fb3);
+  color:white;box-shadow:0 4px 16px rgba(255,107,157,.35);margin-top:12px;
+}
+.btn-gold{
+  background:linear-gradient(135deg,var(--gold-dark),var(--gold));
+  color:white;box-shadow:0 4px 16px rgba(201,162,39,.3);
+}
+.btn-sm{padding:8px 12px;font-size:12px;border-radius:10px;width:auto;flex:1}
+.btn-outline{
+  background:white;color:var(--pink);border:1.5px solid rgba(255,107,157,.3);
+  box-shadow:none;
+}
+.btn-outline:active{background:var(--pink-light)}
+.reservation-card{
+  background:var(--white);border-radius:var(--radius);padding:16px;
+  margin-bottom:12px;box-shadow:var(--shadow-sm);
+  border:1px solid rgba(255,107,157,.06);
+}
+.reservation-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.reservation-time{font-size:20px;font-weight:700;color:var(--text)}
+.reservation-type{
+  font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;
+  letter-spacing:.05em;
+}
+.type-hon{background:linear-gradient(135deg,var(--gold-light),#fdecc8);color:var(--gold-dark)}
+.type-free{background:var(--pink-light);color:var(--pink)}
+.type-sha{background:#f0eeff;color:#7b6fd4}
+.reservation-detail{font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:8px}
+.reservation-detail strong{color:var(--text);font-weight:600}
+.reservation-ops{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.op-tag{
+  font-size:11px;padding:3px 8px;border-radius:8px;
+  background:var(--gold-light);color:var(--gold-dark);font-weight:600;
+}
+.reservation-earnings{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 12px;background:var(--pink-light);border-radius:var(--radius-sm);
+  margin-bottom:10px;font-size:13px;
+}
+.reservation-earnings span:last-child{font-weight:700;color:var(--pink);font-size:15px}
+.extend-btns{display:flex;gap:8px}
+.card-tabs{display:flex;gap:8px;margin-bottom:10px}
+.card-tab.active{background:var(--pink-light);border-color:var(--pink);color:var(--pink);font-weight:700}
+.tip-panel{font-size:13px}
+.tip-panel-label{font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:8px}
+.tip-saved{font-size:13px;font-weight:600;color:var(--gold-dark);margin-bottom:8px}
+.tip-input-row{display:flex;gap:8px;align-items:center}
+.tip-input-row input[type="number"]{flex:1;padding-left:14px}
+.tip-input-row .btn{width:auto;flex-shrink:0;padding:8px 16px}
+.empty-state{
+  text-align:center;padding:40px 20px;color:var(--text-muted);font-size:14px;
+}
+.empty-state svg{width:48px;height:48px;stroke:var(--pink);opacity:.4;margin-bottom:12px}
+.schedule-item{
+  display:flex;gap:12px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.04);
+  align-items:center;
+}
+.schedule-item:last-child{border-bottom:none}
+.schedule-time{
+  font-size:14px;font-weight:700;color:var(--pink);min-width:56px;
+  background:var(--pink-light);padding:6px 8px;border-radius:10px;text-align:center;
+}
+.schedule-info{flex:1;font-size:13px;line-height:1.5}
+.schedule-info .sub{color:var(--text-muted);font-size:12px}
+select,input[type="number"],input[type="text"]{
+  width:100%;padding:12px 14px;border:1.5px solid rgba(255,107,157,.15);
+  border-radius:var(--radius-sm);font-size:15px;background:white;
+  color:var(--text);font-family:inherit;outline:none;
+  -webkit-appearance:none;appearance:none;
+}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239a8490' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;
+}
+.form-group{margin-bottom:16px}
+.form-label{font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;display:block}
+.customer-card{
+  background:var(--white);border-radius:var(--radius);padding:16px;
+  margin-bottom:10px;box-shadow:var(--shadow-sm);
+  border:1px solid rgba(255,107,157,.06);
+}
+.customer-name{font-size:17px;font-weight:700;margin-bottom:6px}
+.customer-meta{font-size:12px;color:var(--text-muted);display:flex;gap:12px;margin-bottom:8px}
+.customer-memo{font-size:13px;color:var(--text);background:var(--pink-light);padding:10px;border-radius:10px;line-height:1.5}
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(61,44,53,.4);
+  display:none;align-items:flex-end;justify-content:center;z-index:200;
+  backdrop-filter:blur(4px);
+}
+.modal-overlay.show{display:flex}
+.modal{
+  background:white;border-radius:24px 24px 0 0;padding:24px 20px;
+  width:100%;max-width:430px;max-height:80dvh;overflow-y:auto;
+  animation:slideUp .3s ease;
+  padding-bottom:calc(24px + var(--safe-bottom));
+}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:none}}
+.modal-title{font-size:18px;font-weight:700;margin-bottom:8px;text-align:center}
+.modal-desc{font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:20px;line-height:1.6}
+.modal-actions{display:flex;flex-direction:column;gap:10px}
+.customer-pick{
+  padding:14px;border:1.5px solid rgba(255,107,157,.15);border-radius:var(--radius-sm);
+  cursor:pointer;text-align:left;background:white;transition:background .15s;
+}
+.customer-pick:active{background:var(--pink-light)}
+.customer-pick-name{font-weight:700;font-size:15px}
+.customer-pick-meta{font-size:12px;color:var(--text-muted);margin-top:4px}
+.rank-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  background:linear-gradient(135deg,var(--gold-light),#fdecc8);
+  color:var(--gold-dark);font-weight:700;font-size:13px;
+  padding:4px 12px;border-radius:20px;
+}
+.progress-bar{
+  height:6px;background:rgba(255,107,157,.12);border-radius:3px;margin-top:10px;overflow:hidden;
+}
+.progress-fill{
+  height:100%;border-radius:3px;
+  background:linear-gradient(90deg,var(--pink),var(--gold));
+  transition:width .5s ease;
+}
+.tip-input-wrap{position:relative}
+.tip-input-wrap::before{
+  content:"¥";position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  color:var(--text-muted);font-weight:600;
+}
+input[type="number"]{padding-left:28px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="logo">Lumi ✨</div>
+    <div class="logo-sub">FOR CAST</div>
+  </header>
+
+  <!-- ホーム -->
+  <section id="screen-home" class="screen active">
+    <div class="grid-2">
+      <div class="card" style="text-align:center">
+        <div class="card-title">現在ランク</div>
+        <div class="card-value gold" id="home-current-rank">S2</div>
+        <div class="card-note" style="font-size:11px;color:var(--text-muted)">※現在ランクは今月固定</div>
+      </div>
+      <div class="card" style="text-align:center">
+        <div class="card-title">来月予定</div>
+        <div class="card-value sm" id="home-next-month-rank">S2</div>
+      </div>
+      <div class="card" style="text-align:center">
+        <div class="card-title">今月本指名</div>
+        <div class="card-value sm" id="home-hon-count">0</div>
+        <div class="card-note">本</div>
+      </div>
+      <div class="card" style="text-align:center">
+        <div class="card-title">次の候補まで</div>
+        <div class="card-value sm" id="home-next-remaining">—</div>
+        <div class="card-note" id="home-next-target"></div>
+      </div>
+    </div>
+    <div class="card" style="padding:14px 20px">
+      <div class="progress-bar"><div class="progress-fill" id="home-progress" style="width:0%"></div></div>
+      <div class="card-note" id="home-progress-label" style="text-align:center;margin-top:8px;font-weight:600;color:var(--text)">—</div>
+    </div>
+    <div class="card" style="text-align:center;margin-bottom:14px">
+      <div class="card-title">今日の予定</div>
+      <div class="card-value sm" id="home-schedule-count">0</div>
+      <div class="card-note">件</div>
+    </div>
+    <div class="section-title">今日の売上予想</div>
+    <div class="card">
+      <div class="card-row"><span class="card-row-label">コース＋延長＋OP</span><span class="card-row-value" id="home-gross">¥0</span></div>
+      <div class="card-row"><span class="card-row-label">雑費</span><span class="card-row-value" id="home-zappi">-¥0</span></div>
+      <div class="card-row"><span class="card-row-label">チップ</span><span class="card-row-value" id="home-tip">+¥0</span></div>
+      <div class="card-row"><span class="card-row-label">手取り予定</span><span class="card-row-value highlight" id="home-net">¥0</span></div>
+    </div>
+    <div class="section-title">本日の出勤</div>
+    <div class="card">
+      <div class="card-value sm gold" id="home-shift-time" style="text-align:center">—</div>
+    </div>
+    <div class="section-title">空き枠</div>
+    <div class="card" id="home-free-slots">
+      <div class="empty-state">出勤・退勤時間を設定してください</div>
+    </div>
+    <div class="section-title">本日の予定</div>
+    <div class="card" id="home-schedule-list">
+      <div class="empty-state">予定タブで予約表を読み込んでください</div>
+    </div>
+  </section>
+
+  <!-- 予定 -->
+  <section id="screen-schedule" class="screen">
+    <div class="section-title">予約表を貼り付け</div>
+    <textarea id="schedule-input" placeholder="予約表をここに貼り付け…"></textarea>
+    <button class="btn btn-primary" id="btn-load">読み込む ✨</button>
+    <div class="section-title">予約一覧</div>
+    <div id="reservation-list">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <p>予約表を貼り付けて<br>「読み込む」をタップ</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 顧客 -->
+  <section id="screen-customers" class="screen">
+    <div class="section-title">本指名顧客</div>
+    <div id="customer-list">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <p>本指名の予約を読み込むと<br>自動で登録されます</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="screen-settings" class="screen">
+    <div class="section-title">ランク設定</div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">現在ランク</label>
+        <select id="setting-rank"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">ランク上限（目標）</label>
+        <select id="setting-rank-cap"></select>
+      </div>
+    </div>
+    <div class="section-title">本日の出勤</div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">本日の出勤時間</label>
+        <select id="setting-shift-start"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">本日の退勤時間</label>
+        <select id="setting-shift-end"></select>
+      </div>
+    </div>
+    <div class="section-title">本指名・チップ</div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">今月の既存本指名（本数）</label>
+        <input type="number" id="setting-monthly-base" value="17" min="0" step="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">今日のチップ（円）</label>
+        <div class="tip-input-wrap">
+          <input type="number" id="setting-tip" value="0" min="0" step="1000">
+        </div>
+      </div>
+    </div>
+    <div class="section-title">来月ランク目安</div>
+    <div class="card" id="rank-threshold-info" style="font-size:13px;line-height:2;color:var(--text-muted)"></div>
+  </section>
+</div>
+
+<!-- タブバー -->
+<nav class="tab-bar">
+  <button class="tab-item active" data-screen="home">
+    <svg viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
+    ホーム
+  </button>
+  <button class="tab-item" data-screen="schedule">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+    予定
+  </button>
+  <button class="tab-item" data-screen="customers">
+    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    顧客
+  </button>
+  <button class="tab-item" data-screen="settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    設定
+  </button>
+</nav>
+
+<!-- 顧客確認モーダル -->
+<div class="modal-overlay" id="customer-modal">
+  <div class="modal">
+    <div class="modal-title">お客様の確認</div>
+    <div class="modal-desc" id="modal-desc"></div>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+const RANKS = ["A","S","S1","S2","S3","S4","S5","S6","S7"];
+
+const RANK_NEXT_MONTH = {
+  A:  [{min:0,rank:"A",candidate:false},{min:10,rank:"S",candidate:false},{min:20,rank:"S1",candidate:false},{min:30,rank:"S2",candidate:false},{min:40,rank:"S3",candidate:true}],
+  S:  [{min:0,rank:"S",candidate:false},{min:10,rank:"S1",candidate:false},{min:20,rank:"S2",candidate:false},{min:30,rank:"S3",candidate:true},{min:40,rank:"S4",candidate:true}],
+  S1: [{min:0,rank:"S1",candidate:false},{min:10,rank:"S2",candidate:false},{min:20,rank:"S3",candidate:true},{min:30,rank:"S4",candidate:true},{min:40,rank:"S5",candidate:true}],
+  S2: [{min:0,rank:"S2",candidate:false},{min:10,rank:"S3",candidate:true},{min:20,rank:"S4",candidate:true},{min:30,rank:"S5",candidate:true},{min:40,rank:"S6",candidate:true}],
+  S3: [{min:0,rank:"S3",candidate:false},{min:10,rank:"S4",candidate:true},{min:20,rank:"S5",candidate:true},{min:30,rank:"S6",candidate:true},{min:40,rank:"S7",candidate:true}],
+  S4: [{min:0,rank:"S4",candidate:false},{min:10,rank:"S5",candidate:true},{min:20,rank:"S6",candidate:true},{min:30,rank:"S7",candidate:true}],
+  S5: [{min:0,rank:"S5",candidate:false},{min:10,rank:"S6",candidate:true},{min:20,rank:"S7",candidate:true}],
+  S6: [{min:0,rank:"S6",candidate:false},{min:10,rank:"S7",candidate:true}],
+  S7: [{min:0,rank:"S7",candidate:false}]
+};
+
+const COURSE_BACK = {
+  A:{60:12000,80:14000,90:16000,100:17000,120:21000,150:26000,180:31000,210:36000,240:41000},
+  S:{60:13000,80:15000,90:17000,100:18000,120:23000,150:28000,180:33000,210:38000,240:43000},
+  S1:{60:14000,80:16000,90:18000,100:19000,120:24000,150:29000,180:34000,210:39000,240:44000},
+  S2:{60:15000,80:17000,90:19000,100:20000,120:25000,150:30000,180:35000,210:40000,240:45000},
+  S3:{60:16000,80:18000,90:20000,100:21000,120:26000,150:31000,180:36000,210:41000,240:46000},
+  S4:{60:17000,80:19000,90:21000,100:22000,120:27000,150:32000,180:37000,210:42000,240:47000},
+  S5:{60:18000,80:20000,90:22000,100:23000,120:28000,150:33000,180:38000,210:43000,240:48000},
+  S6:{60:19000,80:21000,90:23000,100:24000,120:29000,150:34000,180:39000,210:44000,240:49000},
+  S7:{60:20000,80:22000,90:24000,100:25000,120:30000,150:35000,180:40000,210:45000,240:50000}
+};
+
+const EXT_BACK_30 = {A:7000,S:7000,S1:8000,S2:8000,S3:9000,S4:10000,S5:11000,S6:12000,S7:13000};
+
+const OPS = [
+  {key:"デンマ",price:2000},{key:"バイブ",price:1000},{key:"ローター",price:1000},
+  {key:"即尺",price:1000},{key:"オナニー鑑賞",price:1000},{key:"ノーパン入室",price:1000},
+  {key:"聖水",price:2000},{key:"アナル舐め",price:2000},{key:"ごっくん",price:3000},
+  {key:"顔射",price:3000},{key:"イラマ",price:3000},{key:"写真3枚",price:2000},{key:"動画",price:5000}
+];
+
+const SAMPLE_TEXT = `本日の予約です！
+
+24時30分　フリー　80+10分　池袋H
+
+2時00分　本指名　120分　新宿H
+※テスト様
+
+4時10分　本指名　60+10分　池袋自宅
+※サクラギ様
+※ローター
+※動画
+
+5時45分　フリー　80分　大塚H
+※即尺
+
+6時00分　本指名　90+10分　渋谷H
+※動画 即尺 アナル舐め`;
+
+const STORAGE_KEY = "lumi-state-v1";
+
+let reservationIdSeq = 1;
+const reservationTabs = {};
+
+const state = {
+  rank: "S2",
+  rankCap: "S3",
+  tip: 0,
+  monthlyBase: 17,
+  shiftStart: "18:00",
+  shiftEnd: "26:00",
+  reservations: [],
+  customers: []
+};
+
+function saveState(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      rank: state.rank,
+      rankCap: state.rankCap,
+      monthlyBase: state.monthlyBase,
+      tip: state.tip,
+      shiftStart: state.shiftStart,
+      shiftEnd: state.shiftEnd,
+      customers: state.customers
+    }));
+  }catch(e){}
+}
+
+function loadState(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw)return false;
+    const data=JSON.parse(raw);
+    if(data.rank&&RANKS.includes(data.rank))state.rank=data.rank;
+    if(data.rankCap&&RANKS.includes(data.rankCap))state.rankCap=data.rankCap;
+    if(typeof data.monthlyBase==="number"&&data.monthlyBase>=0)state.monthlyBase=data.monthlyBase;
+    if(typeof data.tip==="number"&&data.tip>=0)state.tip=data.tip;
+    if(typeof data.shiftStart==="string")state.shiftStart=data.shiftStart;
+    if(typeof data.shiftEnd==="string")state.shiftEnd=data.shiftEnd;
+    if(Array.isArray(data.customers))state.customers=data.customers;
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
+function fmt(n){return "¥"+n.toLocaleString("ja-JP")}
+
+function fmtClockDisplay(clockStr){
+  const m=String(clockStr).trim().match(/^(\d{1,2}):(\d{2})$/);
+  if(!m)return clockStr;
+  const h=parseInt(m[1],10),mn=parseInt(m[2],10);
+  const pad=String(mn).padStart(2,"0");
+  if(h===24&&mn===0)return"24:00";
+  if(h>24||(h===24&&mn>0))return"翌"+(h-24)+":"+pad;
+  return h+":"+pad;
+}
+
+function fmtBusinessTime(minutes){
+  const h=Math.floor(minutes/60),mn=minutes%60;
+  return fmtClockDisplay(h+":"+String(mn).padStart(2,"0"));
+}
+
+function buildShiftTimeOptions(){
+  const opts=[];
+  for(let min=10*60;min<=30*60;min+=30){
+    const h=Math.floor(min/60),mn=min%60;
+    const value=h+":"+String(mn).padStart(2,"0");
+    opts.push({value,label:fmtClockDisplay(value)});
+  }
+  return opts;
+}
+
+const SHIFT_TIME_OPTIONS=buildShiftTimeOptions();
+
+function normalizeShiftTime(value,fallback){
+  if(SHIFT_TIME_OPTIONS.some(o=>o.value===value))return value;
+  return fallback;
+}
+
+function populateShiftSelect(sel){
+  if(sel.options.length)return;
+  SHIFT_TIME_OPTIONS.forEach(o=>sel.add(new Option(o.label,o.value)));
+}
+
+function parseClockInput(str){
+  if(!str)return null;
+  const m=String(str).trim().match(/^(\d{1,2}):(\d{2})$/);
+  if(!m)return null;
+  const h=parseInt(m[1],10),mn=parseInt(m[2],10);
+  if(mn<0||mn>59||h<0||h>31)return null;
+  if(h>=10&&h<=23)return h*60+mn;
+  if(h>=24&&h<=31)return h*60+mn;
+  if(h>=0&&h<=9)return(h+24)*60+mn;
+  return null;
+}
+
+function calcHonShimei(type, totalMin){
+  if(type!=="本指名"||totalMin<60)return 0;
+  if(totalMin<=150)return 1;
+  return Math.floor(totalMin/60)-1;
+}
+
+function getCourseBack(rank,duration){
+  const table=COURSE_BACK[rank]||COURSE_BACK.A;
+  const keys=Object.keys(table).map(Number).sort((a,b)=>a-b);
+  if(duration<=0)return 0;
+  let base=0,baseDur=0;
+  for(const k of keys){
+    if(k<=duration){base=table[k];baseDur=k}
+    else break;
+  }
+  if(baseDur===0){
+    base=table[keys[0]];baseDur=keys[0];
+  }
+  if(duration>240){
+    const extra=duration-240;
+    const steps=Math.ceil(extra/30);
+    base=table[240]||base;
+    return base+steps*5000;
+  }
+  if(duration===baseDur)return base;
+  if(duration>baseDur&&duration<240){
+    for(const k of keys){
+      if(k>=duration)return table[k];
+    }
+  }
+  return base;
+}
+
+function getExtBack(rank, extMin){
+  if(extMin <= 0) return 0;
+  const rate = EXT_BACK_30[rank] || 7000;
+  // 30分=1倍, 60分=2倍, 90分=3倍 …（延長バックはコースとは別計算）
+  return rate * (extMin / 30);
+}
+
+function calcReservationEarnings(r){
+  const baseDuration = r.duration;
+  const extMin = r.extensionMin || 0;
+  const course = getCourseBack(state.rank, baseDuration);
+  const ext = getExtBack(state.rank, extMin);
+  const opTotal = r.ops.reduce((s, o) => s + o.price, 0);
+  return { course, ext, opTotal, total: course + ext + opTotal, baseDuration, extMin };
+}
+
+function parseDurationStr(durStr){
+  const plusMatch=durStr.match(/^(\d+)\+(\d+)分$/);
+  if(plusMatch){
+    return{
+      duration:parseInt(plusMatch[1],10),
+      serviceMin:parseInt(plusMatch[2],10),
+      durationLabel:plusMatch[1]+"+"+plusMatch[2]+"分"
+    };
+  }
+  const simpleMatch=durStr.match(/^(\d+)分$/);
+  if(simpleMatch){
+    return{
+      duration:parseInt(simpleMatch[1],10),
+      serviceMin:0,
+      durationLabel:simpleMatch[1]+"分"
+    };
+  }
+  return{duration:0,serviceMin:0,durationLabel:durStr};
+}
+
+function getReservationEndMin(r){
+  return(r.timeMin??0)+r.duration+(r.serviceMin||0)+(r.extensionMin||0);
+}
+
+function calcFreeSlots(){
+  const shiftStart=parseClockInput(state.shiftStart);
+  const shiftEnd=parseClockInput(state.shiftEnd);
+  const MIN_GAP=50;
+  if(shiftStart==null||shiftEnd==null||shiftEnd<=shiftStart){
+    return{shiftLabel:"",slots:[]};
+  }
+  const shiftLabel=state.shiftStart+"〜"+state.shiftEnd;
+  const blocks=state.reservations.map(r=>({
+    start:r.timeMin??parseTimeStr(r.timeStr)??0,
+    end:getReservationEndMin(r)
+  })).filter(b=>b.start!=null).sort((a,b)=>a.start-b.start);
+  const slots=[];
+  let cursor=shiftStart;
+  for(const b of blocks){
+    if(b.start>cursor){
+      const gap=b.start-cursor;
+      if(gap>=MIN_GAP)slots.push({from:cursor,to:b.start,minutes:gap});
+    }
+    cursor=Math.max(cursor,b.end);
+  }
+  if(shiftEnd>cursor){
+    const gap=shiftEnd-cursor;
+    if(gap>=MIN_GAP)slots.push({from:cursor,to:shiftEnd,minutes:gap});
+  }
+  return{shiftLabel,slots};
+}
+
+function detectOps(text){
+  const normalized=text.replace(/※/g," ");
+  const found=[];
+  const seen=new Set();
+  const sorted=[...OPS].sort((a,b)=>b.key.length-a.key.length);
+  for(const op of sorted){
+    if(normalized.includes(op.key)&&!seen.has(op.key)){
+      seen.add(op.key);
+      found.push({...op});
+    }
+  }
+  return found;
+}
+
+function calcZappi(gross){
+  if(gross<=0)return 0;
+  return Math.floor(gross/20000)*1000+1000;
+}
+
+function parseTimeStr(str){
+  const m=str.match(/(\d{1,2})時(\d{1,2})分/);
+  if(!m)return null;
+  const h=parseInt(m[1],10),mn=parseInt(m[2],10);
+  // 営業日 10:00〜翌07:00 基準の並び替え用キー
+  // 10:00〜23:59 → そのまま
+  if(h>=10&&h<=23)return h*60+mn;
+  // 24:00〜（24時30分、25時、26時など）→ 24時以降の延長表記
+  if(h>=24)return h*60+mn;
+  // 00:00〜06:59 → 翌日・同一営業日の続き
+  if(h>=0&&h<=6)return(h+24)*60+mn;
+  // 07:00〜09:59 → 営業終了前
+  return(h+24)*60+mn;
+}
+
+function parseReservations(text){
+  reservationIdSeq = 1;
+  const lines=text.split(/\r?\n/);
+  const results=[];
+  let i=0;
+  while(i<lines.length){
+    const line=lines[i].trim();
+    i++;
+    if(!line||line.includes("本日の予約"))continue;
+    const mainMatch=line.match(/(\d{1,2}時\d{1,2}分)\s+(フリー|写指|本指名)\s+(\d+(?:\+\d+)?分)\s+(.+)/);
+    if(!mainMatch)continue;
+    const timeStr=mainMatch[1];
+    const type=mainMatch[2];
+    const durInfo=parseDurationStr(mainMatch[3]);
+    const location=mainMatch[4].trim();
+    let extras="";
+    let customerName="";
+    while(i<lines.length){
+      const next=lines[i].trim();
+      if(!next){i++;continue}
+      if(next.match(/\d{1,2}時\d{1,2}分\s+(フリー|写指|本指名)/))break;
+      extras+=next+" ";
+      const nameMatch=next.match(/※\s*(.+?)様/);
+      if(nameMatch)customerName=nameMatch[1].trim();
+      i++;
+    }
+    const fullText=line+" "+extras;
+    const ops=detectOps(fullText);
+    results.push({
+      id: reservationIdSeq++,
+      timeStr,timeMin:parseTimeStr(timeStr),
+      type,
+      duration:durInfo.duration,
+      serviceMin:durInfo.serviceMin,
+      durationLabel:durInfo.durationLabel,
+      location,
+      customerName,ops,
+      extensionMin:0,
+      tip:0,
+      rawText:fullText.trim()
+    });
+  }
+  results.sort((a,b)=>{
+    const ta=a.timeMin??parseTimeStr(a.timeStr)??0;
+    const tb=b.timeMin??parseTimeStr(b.timeStr)??0;
+    return ta-tb;
+  });
+  return results;
+}
+
+function calcTodayHon(){
+  let today=0;
+  for(const r of state.reservations){
+    const totalMin=r.duration+(r.type==="本指名"?r.extensionMin:0);
+    today+=calcHonShimei(r.type,totalMin);
+  }
+  return today;
+}
+
+function calcReservationTipTotal(){
+  return state.reservations.reduce((s,r)=>s+(r.tip||0),0);
+}
+
+function calcTotals(){
+  let gross=0;
+  for(const r of state.reservations){
+    gross+=calcReservationEarnings(r).total;
+  }
+  const todayHon=calcTodayHon();
+  const honCount=state.monthlyBase+todayHon;
+  const zappi=calcZappi(gross);
+  const tipTotal=calcReservationTipTotal()+(state.tip||0);
+  const net=gross-zappi+tipTotal;
+  return{gross,zappi,net,honCount,todayHon,tipTotal};
+}
+
+function formatNextMonthRank(tier,prefix){
+  if(!tier)return"—";
+  const label=prefix?"来月"+tier.rank:tier.rank;
+  return tier.candidate?label+"候補":label;
+}
+
+function getNextMonthRankInfo(honCount){
+  const tiers=RANK_NEXT_MONTH[state.rank];
+  if(!tiers||!tiers.length){
+    return{achieved:null,next:null,remaining:0,progress:100,progressLabel:"",isMax:true};
+  }
+  let achievedIdx=0;
+  for(let i=0;i<tiers.length;i++){
+    if(honCount>=tiers[i].min)achievedIdx=i;
+  }
+  const achieved=tiers[achievedIdx];
+  const next=tiers[achievedIdx+1]||null;
+  const isMax=state.rank==="S7";
+  const progress=next?Math.min(100,(honCount/next.min)*100):100;
+  let progressLabel="";
+  if(isMax){
+    progressLabel="";
+  }else if(next){
+    progressLabel=honCount+" / "+next.min+"本";
+  }else{
+    progressLabel=honCount+" / "+achieved.min+"本";
+  }
+  return{
+    achieved,
+    next,
+    remaining:next?next.min-honCount:0,
+    progress,
+    progressLabel,
+    isMax
+  };
+}
+
+function renderHome(){
+  const t=calcTotals();
+  const freeInfo=calcFreeSlots();
+  const rankInfo=getNextMonthRankInfo(t.honCount);
+  document.getElementById("home-current-rank").textContent=state.rank;
+  document.getElementById("home-next-month-rank").textContent=formatNextMonthRank(rankInfo.achieved,false);
+  document.getElementById("home-hon-count").textContent=t.honCount;
+  document.getElementById("home-schedule-count").textContent=state.reservations.length;
+  document.getElementById("home-gross").textContent=fmt(t.gross);
+  document.getElementById("home-zappi").textContent="-"+fmt(t.zappi);
+  document.getElementById("home-tip").textContent="+"+fmt(t.tipTotal);
+  document.getElementById("home-net").textContent=fmt(t.net);
+  document.getElementById("home-progress").style.width=rankInfo.progress+"%";
+  document.getElementById("home-progress-label").textContent=rankInfo.isMax?"最高ランク到達":rankInfo.progressLabel;
+  const remainingEl=document.getElementById("home-next-remaining");
+  const targetEl=document.getElementById("home-next-target");
+  if(rankInfo.isMax){
+    remainingEl.textContent="—";
+    targetEl.textContent="最高ランク到達";
+  }else if(rankInfo.next){
+    remainingEl.textContent="あと"+rankInfo.remaining+"本";
+    targetEl.textContent=formatNextMonthRank(rankInfo.next,false);
+  }else{
+    remainingEl.textContent="—";
+    targetEl.textContent=formatNextMonthRank(rankInfo.achieved,false);
+  }
+  const slotsEl=document.getElementById("home-free-slots");
+  const shiftEl=document.getElementById("home-shift-time");
+  if(!freeInfo.shiftLabel){
+    shiftEl.textContent="—";
+    slotsEl.innerHTML='<div class="empty-state">出勤・退勤時間を設定してください</div>';
+  }else{
+    shiftEl.textContent=fmtClockDisplay(state.shiftStart)+"〜"+fmtClockDisplay(state.shiftEnd);
+    if(!freeInfo.slots.length){
+      slotsEl.innerHTML='<div class="empty-state">本日の空き枠なし</div>';
+    }else{
+      slotsEl.innerHTML=freeInfo.slots.map(s=>`
+        <div class="card-row">
+          <span class="card-row-label">${fmtBusinessTime(s.from)}〜${fmtBusinessTime(s.to)}</span>
+          <span class="card-row-value highlight">${s.minutes}分</span>
+        </div>`).join("");
+    }
+  }
+  const listEl=document.getElementById("home-schedule-list");
+  if(!state.reservations.length){
+    listEl.innerHTML='<div class="empty-state">予定タブで予約表を読み込んでください</div>';
+    return;
+  }
+  listEl.innerHTML=state.reservations.map(r=>{
+    const e=calcReservationEarnings(r);
+    const durDisplay=r.durationLabel+(r.extensionMin>0?" (+延長"+r.extensionMin+"分)":"");
+    return`<div class="schedule-item">
+      <div class="schedule-time">${r.timeStr.replace("時",":").replace("分","")}</div>
+      <div class="schedule-info">
+        <strong>${r.type}</strong> ${durDisplay} ${r.location}
+        <div class="sub">${r.customerName?r.customerName+"様 · ":""}${fmt(e.total)}</div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function typeClass(type){
+  if(type==="本指名")return"type-hon";
+  if(type==="写指")return"type-sha";
+  return"type-free";
+}
+
+function renderReservations(){
+  const el=document.getElementById("reservation-list");
+  if(!state.reservations.length){
+    el.innerHTML=`<div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      <p>予約表を貼り付けて<br>「読み込む」をタップ</p></div>`;
+    return;
+  }
+  el.innerHTML=state.reservations.map(r=>{
+    const honMin=r.type==="本指名"?r.duration+r.extensionMin:r.duration;
+    const hon=calcHonShimei(r.type,honMin);
+    const e=calcReservationEarnings(r);
+    const opsHtml=r.ops.length?`<div class="reservation-ops">${r.ops.map(o=>`<span class="op-tag">${o.key} ${fmt(o.price)}</span>`).join("")}</div>`:"";
+    const extNote=r.extensionMin>0?` <span style="color:var(--pink)">(+延長${r.extensionMin}分)</span>`:"";
+    const tab=reservationTabs[r.id]||"extend";
+    const tipSavedHtml=(r.tip||0)>0?`<div class="tip-saved">チップ +${(r.tip||0).toLocaleString("ja-JP")}円</div>`:"";
+    return`<div class="reservation-card" data-id="${r.id}">
+      <div class="reservation-header">
+        <div class="reservation-time">${r.timeStr}</div>
+        <span class="reservation-type ${typeClass(r.type)}">${r.type}</span>
+      </div>
+      <div class="reservation-detail">
+        <strong>${r.durationLabel}</strong>${extNote} · ${r.location}<br>
+        ${r.customerName?`<strong>${r.customerName}様</strong><br>`:""}
+        本指名: ${hon}本<br>
+        コース（${r.duration}分）${fmt(e.course)}${e.ext > 0 ? " + 延長（" + e.extMin + "分）" + fmt(e.ext) : ""}
+      </div>
+      ${opsHtml}
+      <div class="reservation-earnings"><span>売上</span><span>${fmt(e.total)}</span></div>
+      ${tipSavedHtml}
+      <div class="card-tabs">
+        <button class="btn btn-sm btn-outline card-tab${tab==="extend"?" active":""}" data-id="${r.id}" data-tab="extend">延長</button>
+        <button class="btn btn-sm btn-outline card-tab${tab==="tip"?" active":""}" data-id="${r.id}" data-tab="tip">チップ</button>
+      </div>
+      <div class="extend-panel" style="display:${tab==="extend"?"block":"none"}">
+        <div class="extend-btns">
+          <button class="btn btn-sm btn-outline extend-btn" data-id="${r.id}" data-min="30">延長30分</button>
+          <button class="btn btn-sm btn-outline extend-btn" data-id="${r.id}" data-min="60">延長60分</button>
+          <button class="btn btn-sm btn-outline extend-btn" data-id="${r.id}" data-min="90">延長90分</button>
+        </div>
+      </div>
+      <div class="tip-panel" style="display:${tab==="tip"?"block":"none"}">
+        <div class="tip-panel-label">このお客様からのチップ</div>
+        <div class="tip-input-row">
+          <input type="number" class="tip-input" data-id="${r.id}" value="${r.tip||0}" min="0" step="1000" placeholder="0">
+          <button class="btn btn-sm btn-primary tip-save-btn" data-id="${r.id}">保存</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".card-tab").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      reservationTabs[parseInt(btn.dataset.id,10)]=btn.dataset.tab;
+      renderReservations();
+    });
+  });
+  el.querySelectorAll(".extend-btn").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const id=parseInt(btn.dataset.id,10);
+      const min=parseInt(btn.dataset.min,10);
+      const r=state.reservations.find(x=>x.id===id);
+      if(r){r.extensionMin+=min;renderAll()}
+    });
+  });
+  el.querySelectorAll(".tip-save-btn").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const id=parseInt(btn.dataset.id,10);
+      const r=state.reservations.find(x=>x.id===id);
+      const input=el.querySelector('.tip-input[data-id="'+id+'"]');
+      if(r&&input){
+        r.tip=parseInt(input.value,10)||0;
+        renderAll();
+      }
+    });
+  });
+}
+
+function renderCustomers(){
+  const el=document.getElementById("customer-list");
+  if(!state.customers.length){
+    el.innerHTML=`<div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <p>本指名の予約を読み込むと<br>自動で登録されます</p></div>`;
+    return;
+  }
+  el.innerHTML=state.customers.map((c,i)=>`
+    <div class="customer-card">
+      <div class="customer-name">${c.name} <span class="rank-badge">${c.count}回</span></div>
+      <div class="customer-meta">
+        <span>最終: ${c.lastVisit}</span>
+      </div>
+      ${c.memo?`<div class="customer-memo">${c.memo}</div>`:""}
+    </div>`).join("");
+}
+
+function renderSettings(){
+  const rankSel=document.getElementById("setting-rank");
+  const capSel=document.getElementById("setting-rank-cap");
+  if(!rankSel.options.length){
+    RANKS.forEach(r=>{
+      rankSel.add(new Option(r,r));
+      capSel.add(new Option(r,r));
+    });
+  }
+  rankSel.value=state.rank;
+  capSel.value=state.rankCap;
+  document.getElementById("setting-tip").value=state.tip;
+  document.getElementById("setting-monthly-base").value=state.monthlyBase;
+  populateShiftSelect(document.getElementById("setting-shift-start"));
+  populateShiftSelect(document.getElementById("setting-shift-end"));
+  state.shiftStart=normalizeShiftTime(state.shiftStart,"18:00");
+  state.shiftEnd=normalizeShiftTime(state.shiftEnd,"26:00");
+  document.getElementById("setting-shift-start").value=state.shiftStart;
+  document.getElementById("setting-shift-end").value=state.shiftEnd;
+  const tiers=RANK_NEXT_MONTH[state.rank]||[];
+  document.getElementById("rank-threshold-info").innerHTML=tiers.length
+    ? tiers.map((t,i)=>{
+        const nextMin=tiers[i+1]?tiers[i+1].min-1:null;
+        const range=t.min===0&&nextMin!==null?"0〜"+nextMin+"本":t.min+"本以上";
+        return`<div><strong>${range}</strong> → ${formatNextMonthRank(t,true)}</div>`;
+      }).join("")
+    : `<div>${state.rank}からの来月目安はありません</div>`;
+}
+
+function renderAll(){
+  renderHome();
+  renderReservations();
+  renderCustomers();
+  renderSettings();
+}
+
+function registerCustomer(name,memo){
+  const today=new Date().toLocaleDateString("ja-JP");
+  const existing=state.customers.filter(c=>c.name===name);
+  if(existing.length===1){
+    existing[0].count++;
+    existing[0].lastVisit=today;
+    if(memo&&!existing[0].memo)existing[0].memo=memo;
+    saveState();
+    return;
+  }
+  if(existing.length>1){
+    showCustomerModal(name,memo,existing);
+    return;
+  }
+  state.customers.push({name,count:1,lastVisit:today,memo:memo||""});
+  saveState();
+}
+
+function showCustomerModal(name,memo,matches){
+  const modal=document.getElementById("customer-modal");
+  document.getElementById("modal-desc").textContent=`「${name}」様は同名のお客様が${matches.length}名います。どちらですか？`;
+  const actions=document.getElementById("modal-actions");
+  actions.innerHTML=matches.map((c,i)=>`
+    <button class="customer-pick" data-idx="${i}">
+      <div class="customer-pick-name">${c.name} (${c.count}回来店)</div>
+      <div class="customer-pick-meta">最終: ${c.lastVisit}${c.memo?" · "+c.memo:""}</div>
+    </button>`).join("")+
+    `<button class="btn btn-gold" id="modal-new">新規登録として追加</button>`;
+  actions.querySelectorAll(".customer-pick").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const c=matches[parseInt(btn.dataset.idx,10)];
+      c.count++;
+      c.lastVisit=new Date().toLocaleDateString("ja-JP");
+      modal.classList.remove("show");
+      saveState();
+      renderCustomers();
+    });
+  });
+  document.getElementById("modal-new").addEventListener("click",()=>{
+    state.customers.push({name:name+"（新規）",count:1,lastVisit:new Date().toLocaleDateString("ja-JP"),memo:memo||""});
+    modal.classList.remove("show");
+    saveState();
+    renderCustomers();
+  });
+  modal.classList.add("show");
+}
+
+function processCustomersFromReservations(){
+  for(const r of state.reservations){
+    if(r.type!=="本指名"||!r.customerName)continue;
+    const memo=r.ops.map(o=>o.key).join("、");
+    registerCustomer(r.customerName,memo);
+  }
+}
+
+function loadSchedule(registerCustomers){
+  const text=document.getElementById("schedule-input").value.trim();
+  if(!text)return;
+  state.reservations=parseReservations(text);
+  if(registerCustomers)processCustomersFromReservations();
+  renderAll();
+}
+
+document.querySelectorAll(".tab-item").forEach(tab=>{
+  tab.addEventListener("click",()=>{
+    document.querySelectorAll(".tab-item").forEach(t=>t.classList.remove("active"));
+    document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("screen-"+tab.dataset.screen).classList.add("active");
+  });
+});
+
+document.getElementById("btn-load").addEventListener("click",()=>loadSchedule(true));
+document.getElementById("setting-rank").addEventListener("change",e=>{state.rank=e.target.value;saveState();renderAll()});
+document.getElementById("setting-rank-cap").addEventListener("change",e=>{state.rankCap=e.target.value;saveState();renderAll()});
+document.getElementById("setting-tip").addEventListener("input",e=>{state.tip=parseInt(e.target.value,10)||0;saveState();renderAll()});
+document.getElementById("setting-monthly-base").addEventListener("input",e=>{state.monthlyBase=parseInt(e.target.value,10)||0;saveState();renderAll()});
+document.getElementById("setting-shift-start").addEventListener("change",e=>{state.shiftStart=e.target.value.trim();saveState();renderAll()});
+document.getElementById("setting-shift-end").addEventListener("change",e=>{state.shiftEnd=e.target.value.trim();saveState();renderAll()});
+document.getElementById("customer-modal").addEventListener("click",e=>{
+  if(e.target.id==="customer-modal")e.target.classList.remove("show");
+});
+
+loadState();
+document.getElementById("schedule-input").value=SAMPLE_TEXT;
+loadSchedule(false);
+renderAll();
+})();
+</script>
+</body>
+</html>
