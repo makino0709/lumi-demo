@@ -226,6 +226,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 }
 .customer-name{font-size:17px;font-weight:700;margin-bottom:6px}
 .customer-meta{font-size:12px;color:var(--text-muted);display:flex;gap:12px;margin-bottom:8px}
+.reservation-card.cancelled{opacity:.65;border-color:rgba(158,158,158,.3)}
+.reservation-cancel-badge{display:inline-block;font-size:11px;font-weight:700;color:#fff;background:#9a8490;padding:3px 10px;border-radius:20px;margin-left:8px}
 .customer-card-actions{display:flex;gap:8px;margin-top:12px}
 .customer-card-actions .btn{flex:1}
 .modal-overlay{
@@ -312,6 +314,11 @@ input[type="number"]{padding-left:28px}
       <div class="card-value sm" id="home-schedule-count">0</div>
       <div class="card-note">件</div>
     </div>
+    <div class="card" style="text-align:center;margin-bottom:14px">
+      <div class="card-title">明日の事前予約</div>
+      <div class="card-value sm" id="home-tomorrow-count">0</div>
+      <div class="card-note">件</div>
+    </div>
     <div class="section-title">今日の売上予想</div>
     <div class="card">
       <div class="card-row"><span class="card-row-label">コース＋延長＋OP</span><span class="card-row-value" id="home-gross">¥0</span></div>
@@ -367,6 +374,7 @@ input[type="number"]{padding-left:28px}
           <option value="駒込H">駒込H</option>
           <option value="鶯谷H">鶯谷H</option>
           <option value="練馬H">練馬H</option>
+          <option value="自宅">自宅</option>
           <option value="その他H">その他H</option>
         </select>
       </div>
@@ -400,6 +408,12 @@ input[type="number"]{padding-left:28px}
       </div>
       <button class="btn btn-gold" id="btn-manual-add">予約を追加</button>
     </div>
+    <div id="schedule-date-tabs" class="card-tabs" style="margin-bottom:12px;flex-wrap:wrap;display:flex;gap:8px"></div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">日付選択</label>
+      <input type="date" id="schedule-date-picker">
+    </div>
+    <div class="card" id="schedule-day-stats" style="margin-bottom:14px;display:none"></div>
     <div class="section-title">予約一覧</div>
     <div id="reservation-list">
       <div class="empty-state">
@@ -538,6 +552,68 @@ input[type="number"]{padding-left:28px}
   </div>
 </div>
 
+<!-- 予約編集モーダル -->
+<div class="modal-overlay" id="reservation-edit-modal">
+  <div class="modal">
+    <div class="modal-title">予約を編集</div>
+    <div class="form-group">
+      <label class="form-label">開始時間</label>
+      <select id="edit-res-time"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">種別</label>
+      <select id="edit-res-type">
+        <option value="本指名">本指名</option>
+        <option value="写指">写指</option>
+        <option value="フリー">フリー</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">コース</label>
+      <select id="edit-res-duration"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">場所</label>
+      <select id="edit-res-location"></select>
+    </div>
+    <div class="form-group" id="edit-res-location-other-wrap" style="display:none">
+      <label class="form-label">場所（自由入力）</label>
+      <input type="text" id="edit-res-location-other" placeholder="例: 新宿H">
+    </div>
+    <div class="form-group">
+      <label class="form-label">顧客名 / 表示名</label>
+      <input type="text" id="edit-res-guest-name" placeholder="例: ヤマダ / マキノ黒メガネ">
+    </div>
+    <div class="form-group">
+      <label class="form-label">OP</label>
+      <div id="edit-res-op-list" class="op-check-list"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">チップ（円）</label>
+      <input type="number" id="edit-res-tip" min="0" step="1000" value="0">
+    </div>
+    <div class="form-group">
+      <label class="form-label">メモ</label>
+      <textarea id="edit-res-memo" rows="3" placeholder="予約メモ"></textarea>
+    </div>
+    <button class="btn btn-gold" id="btn-save-reservation-edit">保存</button>
+    <button class="btn btn-outline" id="btn-cancel-reservation-edit" style="width:100%;margin-top:10px">キャンセル扱いにする</button>
+    <button class="btn btn-outline" id="btn-delete-reservation-edit" style="width:100%;margin-top:10px">削除</button>
+  </div>
+</div>
+
+<!-- 予約削除確認モーダル -->
+<div class="modal-overlay" id="reservation-delete-modal">
+  <div class="modal">
+    <div class="modal-title">予約の削除</div>
+    <div class="modal-desc">この予約を削除しますか？</div>
+    <div class="modal-actions">
+      <button class="btn btn-gold" id="btn-confirm-delete-reservation">削除する</button>
+      <button class="btn btn-outline" id="btn-abort-delete-reservation">キャンセル</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
 "use strict";
@@ -608,6 +684,57 @@ let editingNameReservationId = null;
 let nameEditSelectedCustomerId = null;
 const nameEditQuery = {};
 const nameEditNewMode = {};
+let editingReservationId = null;
+let pendingDeleteReservationId = null;
+
+const HOTEL_PRESET_LOCATIONS=["池袋H","歌舞伎H","道玄坂H","錦糸町H","大塚H","駒込H","鶯谷H","練馬H"];
+const LOCATION_OPTIONS=[...HOTEL_PRESET_LOCATIONS,"自宅","その他H"];
+
+function inferLocationType(location){
+  if(!location)return"hotel";
+  if(/自宅$/.test(location))return"home";
+  return"hotel";
+}
+
+function locationSelectValueFromReservation(r){
+  if(r.locationType==="home")return"自宅";
+  if(HOTEL_PRESET_LOCATIONS.includes(r.location))return r.location;
+  return"その他H";
+}
+
+function updateLocationOtherWrap(prefix){
+  const sel=document.getElementById(prefix+"-location");
+  const wrap=document.getElementById(prefix+"-location-other-wrap");
+  const label=wrap?.querySelector(".form-label");
+  const input=document.getElementById(prefix+"-location-other");
+  if(!sel||!wrap||!input)return;
+  const val=sel.value;
+  if(val==="自宅"){
+    wrap.style.display="block";
+    if(label)label.textContent="自宅名（自由入力）";
+    input.placeholder="例: 池袋自宅";
+  }else if(val==="その他H"){
+    wrap.style.display="block";
+    if(label)label.textContent="場所（自由入力）";
+    input.placeholder="例: 新宿H";
+  }else{
+    wrap.style.display="none";
+  }
+}
+
+function resolveLocationFromForm(selectVal,otherText){
+  if(selectVal==="自宅"){
+    const loc=otherText.trim();
+    if(!loc)return null;
+    return{location:loc,locationType:"home"};
+  }
+  if(selectVal==="その他H"){
+    const loc=otherText.trim();
+    if(!loc)return null;
+    return{location:loc,locationType:"hotel"};
+  }
+  return{location:selectVal,locationType:"hotel"};
+}
 
 const state = {
   rank: "S2",
@@ -616,9 +743,109 @@ const state = {
   monthlyBase: 17,
   shiftStart: "18:00",
   shiftEnd: "26:00",
-  reservations: [],
+  reservationsByDate: {},
+  selectedScheduleDateId: null,
   customers: []
 };
+
+function getTodayBizId(){
+  return getBusinessDayId();
+}
+
+function getBusinessDayCalendarDate(dateId){
+  const id=dateId||getTodayBizId();
+  const parts=id.split("-").map(Number);
+  return new Date(parts[0],parts[1]-1,parts[2]);
+}
+
+function getTomorrowBizId(){
+  const d=getBusinessDayCalendarDate();
+  d.setDate(d.getDate()+1);
+  return formatBusinessDayId(d);
+}
+
+function businessDayIdFromMonthDay(month,day){
+  const biz=getBusinessDayCalendarDate();
+  let year=biz.getFullYear();
+  const candidate=new Date(year,month-1,day);
+  const bizStart=new Date(biz.getFullYear(),biz.getMonth(),biz.getDate()).getTime();
+  if(candidate.getTime()<bizStart-30*86400000)year++;
+  return formatBusinessDayId(new Date(year,month-1,day));
+}
+
+function detectScheduleHeaderDate(line){
+  if(/明日の予約/.test(line))return getTomorrowBizId();
+  if(/本日の予約/.test(line))return getTodayBizId();
+  let m=line.match(/(\d{1,2})月(\d{1,2})日の予約/);
+  if(m)return businessDayIdFromMonthDay(parseInt(m[1],10),parseInt(m[2],10));
+  m=line.match(/(\d{1,2})\/(\d{1,2})の予約/);
+  if(m)return businessDayIdFromMonthDay(parseInt(m[1],10),parseInt(m[2],10));
+  return null;
+}
+
+function formatDateTabLabel(dateId){
+  if(dateId===getTodayBizId())return"今日";
+  if(dateId===getTomorrowBizId())return"明日";
+  const parts=dateId.split("-").map(Number);
+  return parts[1]+"/"+parts[2];
+}
+
+function getReservationsForDate(dateId){
+  if(!state.reservationsByDate[dateId])state.reservationsByDate[dateId]=[];
+  return state.reservationsByDate[dateId];
+}
+
+function getSelectedScheduleDateId(){
+  return state.selectedScheduleDateId||getTodayBizId();
+}
+
+function setSelectedScheduleDateId(dateId){
+  state.selectedScheduleDateId=dateId;
+  saveState();
+}
+
+function getTodayReservations(){
+  return getReservationsForDate(getTodayBizId());
+}
+
+function getActiveReservations(){
+  return getReservationsForDate(getSelectedScheduleDateId());
+}
+
+function findReservationById(id){
+  for(const arr of Object.values(state.reservationsByDate)){
+    const r=arr.find(x=>x.id===id);
+    if(r)return r;
+  }
+  return null;
+}
+
+function updateReservationIdSeq(){
+  let max=0;
+  for(const arr of Object.values(state.reservationsByDate)){
+    for(const r of arr)max=Math.max(max,r.id||0);
+  }
+  reservationIdSeq=max+1;
+}
+
+function prunePastReservations(){
+  const today=getTodayBizId();
+  for(const key of Object.keys(state.reservationsByDate)){
+    if(key<today)delete state.reservationsByDate[key];
+  }
+}
+
+function getAllScheduleDateIds(){
+  const ids=new Set(Object.keys(state.reservationsByDate).filter(k=>(state.reservationsByDate[k]||[]).length>0));
+  ids.add(getTodayBizId());
+  ids.add(getTomorrowBizId());
+  ids.add(getSelectedScheduleDateId());
+  return Array.from(ids).sort();
+}
+
+function hasAnyReservations(){
+  return Object.values(state.reservationsByDate).some(arr=>arr.length>0);
+}
 
 function formatBusinessDayId(d){
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -633,13 +860,17 @@ function getBusinessDayId(date){
   return formatBusinessDayId(new Date(y,m,day));
 }
 
-function clearBusinessDayData(){
-  state.reservations=[];
+function onBusinessDayChange(){
   state.tip=0;
-  reservationIdSeq=1;
+  prunePastReservations();
+  updateReservationIdSeq();
   Object.keys(reservationTabs).forEach(k=>delete reservationTabs[k]);
   const ta=document.getElementById("schedule-input");
   if(ta)ta.value="";
+}
+
+function clearBusinessDayData(){
+  onBusinessDayChange();
 }
 
 function saveState(){
@@ -653,7 +884,8 @@ function saveState(){
       shiftStart:state.shiftStart,
       shiftEnd:state.shiftEnd,
       scheduleText:document.getElementById("schedule-input")?.value||"",
-      reservations:state.reservations,
+      reservationsByDate:state.reservationsByDate,
+      selectedScheduleDateId:getSelectedScheduleDateId(),
       customers:state.customers
     }));
   }catch(e){}
@@ -680,24 +912,31 @@ function loadState(){
       });
       customerIdSeq=state.customers.reduce((max,c)=>Math.max(max,c.id||0),0)+1;
     }
-    const currentBizId=getBusinessDayId();
+    const currentBizId=getTodayBizId();
     const savedBizId=data.businessDayId;
+    if(data.reservationsByDate&&typeof data.reservationsByDate==="object"){
+      state.reservationsByDate=data.reservationsByDate;
+      for(const dateId of Object.keys(state.reservationsByDate)){
+        for(const r of state.reservationsByDate[dateId])migrateReservation(r);
+      }
+    }else if(Array.isArray(data.reservations)){
+      state.reservationsByDate={[savedBizId||currentBizId]:data.reservations};
+      for(const r of data.reservations)migrateReservation(r);
+    }
+    if(typeof data.selectedScheduleDateId==="string"){
+      state.selectedScheduleDateId=data.selectedScheduleDateId;
+    }
+    prunePastReservations();
+    updateReservationIdSeq();
     if(savedBizId&&savedBizId===currentBizId){
       if(typeof data.scheduleText==="string"){
         document.getElementById("schedule-input").value=data.scheduleText;
       }
-      if(Array.isArray(data.reservations)){
-        state.reservations=data.reservations;
-        for(const r of state.reservations){
-          migrateReservation(r);
-        }
-        reservationIdSeq=state.reservations.reduce((max,r)=>Math.max(max,r.id||0),0)+1;
-      }
       if(typeof data.tip==="number"&&data.tip>=0)state.tip=data.tip;
     }else if(savedBizId){
-      clearBusinessDayData();
+      onBusinessDayChange();
     }else{
-      clearBusinessDayData();
+      onBusinessDayChange();
     }
     saveState();
     return true;
@@ -840,7 +1079,8 @@ function getReservationEndMin(r){
   return(r.timeMin??0)+r.duration+(r.serviceMin||0)+(r.extensionMin||0);
 }
 
-function calcFreeSlots(){
+function calcFreeSlots(reservations){
+  reservations=reservations||getTodayReservations();
   const shiftStart=parseClockInput(state.shiftStart);
   const shiftEnd=parseClockInput(state.shiftEnd);
   const MIN_GAP=50;
@@ -848,7 +1088,7 @@ function calcFreeSlots(){
     return{shiftLabel:"",slots:[]};
   }
   const shiftLabel=state.shiftStart+"〜"+state.shiftEnd;
-  const blocks=state.reservations.map(r=>({
+  const blocks=filterActiveReservations(reservations).map(r=>({
     start:r.timeMin??parseTimeStr(r.timeStr)??0,
     end:getReservationEndMin(r)
   })).filter(b=>b.start!=null).sort((a,b)=>a.start-b.start);
@@ -1007,11 +1247,171 @@ function createCustomer(shopName,displayName){
   return customer;
 }
 
+function filterActiveReservations(reservations){
+  return(reservations||[]).filter(r=>!r.cancelled);
+}
+
+function formatReservationMemoLine(memo){
+  if(!memo)return"";
+  const line=memo.split(/\r?\n/).map(l=>l.trim()).filter(Boolean)[0];
+  return line||"";
+}
+
+function opsFromKeys(keys){
+  const seen=new Set();
+  return OPS.filter(op=>keys.includes(op.key)&&!seen.has(op.key)&&seen.add(op.key)).map(op=>({...op}));
+}
+
+function rebuildReservationRawText(r){
+  const lines=[r.timeStr+"　"+r.type+"　"+r.durationLabel+"　"+r.location];
+  if(r.ops&&r.ops.length)lines.push("※"+r.ops.map(o=>o.key).join("　"));
+  const name=r.guestDisplayName||r.customerName;
+  if(name)lines.push("※"+name.replace(/様$/,"")+"様");
+  if(r.memo)lines.push("※"+r.memo.replace(/\n/g,"　"));
+  return lines.join("\n");
+}
+
+function findReservationDateId(resId){
+  for(const dateId of Object.keys(state.reservationsByDate)){
+    if((state.reservationsByDate[dateId]||[]).some(r=>r.id===resId))return dateId;
+  }
+  return null;
+}
+
+function deleteReservationById(resId){
+  const dateId=findReservationDateId(resId);
+  if(!dateId)return;
+  state.reservationsByDate[dateId]=(state.reservationsByDate[dateId]||[]).filter(r=>r.id!==resId);
+  delete reservationTabs[resId];
+  saveState();
+}
+
+function initReservationEditFormControls(){
+  const timeSel=document.getElementById("edit-res-time");
+  const durSel=document.getElementById("edit-res-duration");
+  const locSel=document.getElementById("edit-res-location");
+  const opEl=document.getElementById("edit-res-op-list");
+  if(timeSel&&!timeSel.options.length){
+    SHIFT_TIME_OPTIONS.forEach(o=>timeSel.add(new Option(o.label,o.value)));
+  }
+  if(durSel&&!durSel.options.length){
+    MANUAL_COURSE_DURATIONS.forEach(d=>durSel.add(new Option(d+"分",String(d))));
+  }
+  if(locSel&&!locSel.options.length){
+    LOCATION_OPTIONS.forEach(l=>locSel.add(new Option(l,l)));
+  }
+  if(opEl&&!opEl.dataset.ready){
+    opEl.innerHTML=OPS.map(op=>`
+      <label class="op-check-item">
+        <input type="checkbox" class="edit-res-op-check" value="${op.key}">${op.key}
+      </label>`).join("");
+    opEl.dataset.ready="1";
+  }
+}
+
+function clockFromReservation(r){
+  if(r.timeMin!=null){
+    const h=Math.floor(r.timeMin/60),mn=r.timeMin%60;
+    return h+":"+String(mn).padStart(2,"0");
+  }
+  const m=String(r.timeStr||"").match(/(\d{1,2})時(\d{1,2})分/);
+  if(!m)return"18:00";
+  return parseInt(m[1],10)+":"+String(parseInt(m[2],10)).padStart(2,"0");
+}
+
+function openReservationEditModal(resId){
+  const r=findReservationById(resId);
+  if(!r)return;
+  initReservationEditFormControls();
+  editingReservationId=resId;
+  document.getElementById("edit-res-time").value=clockFromReservation(r);
+  document.getElementById("edit-res-type").value=r.type;
+  document.getElementById("edit-res-duration").value=String(r.duration);
+  const selectVal=locationSelectValueFromReservation(r);
+  document.getElementById("edit-res-location").value=selectVal;
+  updateLocationOtherWrap("edit-res");
+  document.getElementById("edit-res-location-other").value=
+    selectVal==="自宅"||selectVal==="その他H"?r.location||"":"";
+  const guestName=r.guestDisplayName||r.customerName||"";
+  document.getElementById("edit-res-guest-name").value=guestName;
+  document.querySelectorAll(".edit-res-op-check").forEach(el=>{
+    el.checked=(r.ops||[]).some(o=>o.key===el.value);
+  });
+  document.getElementById("edit-res-tip").value=r.tip||0;
+  document.getElementById("edit-res-memo").value=r.memo||"";
+  const cancelBtn=document.getElementById("btn-cancel-reservation-edit");
+  if(cancelBtn)cancelBtn.textContent=r.cancelled?"キャンセル解除":"キャンセル扱いにする";
+  document.getElementById("reservation-edit-modal").classList.add("show");
+}
+
+function saveReservationEdit(){
+  const r=findReservationById(editingReservationId);
+  if(!r)return;
+  const oldTip=r.tip||0;
+  const timeClock=document.getElementById("edit-res-time").value;
+  r.timeMin=parseClockInput(timeClock);
+  r.timeStr=clockToTimeStr(timeClock);
+  r.type=document.getElementById("edit-res-type").value;
+  r.duration=parseInt(document.getElementById("edit-res-duration").value,10);
+  r.durationLabel=r.duration+"分";
+  const locFields=resolveLocationFromForm(
+    document.getElementById("edit-res-location").value,
+    document.getElementById("edit-res-location-other").value
+  );
+  if(!locFields)return;
+  r.location=locFields.location;
+  r.locationType=locFields.locationType;
+  const guestName=document.getElementById("edit-res-guest-name").value.trim();
+  r.guestDisplayName=guestName;
+  if(r.type==="本指名"&&!r.customerLinked){
+    r.customerName=guestName.replace(/様$/,"");
+  }
+  const opKeys=[];
+  document.querySelectorAll(".edit-res-op-check:checked").forEach(el=>opKeys.push(el.value));
+  r.ops=opsFromKeys(opKeys);
+  r.tip=parseInt(document.getElementById("edit-res-tip").value,10)||0;
+  r.memo=document.getElementById("edit-res-memo").value;
+  r.rawText=rebuildReservationRawText(r);
+  if(r.customerLinked)applyReservationTipToCustomer(r,oldTip,r.tip);
+  const dateId=findReservationDateId(r.id);
+  if(dateId)sortReservationsForDate(dateId);
+  editingReservationId=null;
+  document.getElementById("reservation-edit-modal").classList.remove("show");
+  saveState();
+  renderAll();
+}
+
+function toggleReservationCancelled(resId){
+  const r=findReservationById(resId);
+  if(!r)return;
+  r.cancelled=!r.cancelled;
+  saveState();
+  renderAll();
+}
+
+function openReservationDeleteConfirm(resId){
+  pendingDeleteReservationId=resId;
+  document.getElementById("reservation-delete-modal").classList.add("show");
+}
+
+function confirmDeleteReservation(){
+  if(!pendingDeleteReservationId)return;
+  deleteReservationById(pendingDeleteReservationId);
+  pendingDeleteReservationId=null;
+  editingReservationId=null;
+  document.getElementById("reservation-delete-modal").classList.remove("show");
+  document.getElementById("reservation-edit-modal").classList.remove("show");
+  renderAll();
+}
+
 function migrateReservation(r){
   if(r.guestDisplayName==null)r.guestDisplayName="";
+  if(r.memo==null)r.memo="";
+  if(r.cancelled==null)r.cancelled=false;
   if(r.customerLinked==null)r.customerLinked=!!(r.honCounted||r.customerId);
   if(r.linkedCustomerId==null)r.linkedCustomerId=r.customerId||null;
   if(r.customerLinked&&!r.linkedCustomerId)r.customerLinked=false;
+  if(r.locationType==null)r.locationType=inferLocationType(r.location);
 }
 
 function escAttr(s){
@@ -1127,7 +1527,7 @@ function saveReservationGuestName(r,name){
 }
 
 function saveReservationNameConfirm(resId){
-  const r=state.reservations.find(x=>x.id===resId);
+  const r=findReservationById(resId);
   if(!r)return;
   const query=(nameEditQuery[resId]!==undefined?nameEditQuery[resId]:(r.guestDisplayName||r.customerName||"")).trim();
   if(r.type!=="本指名"){
@@ -1289,6 +1689,7 @@ function createManualReservation(timeClock,type,duration,location,shopName,opKey
     serviceMin:0,
     durationLabel:duration+"分",
     location,
+    locationType:inferLocationType(location),
     customerName:shopName||"",
     guestDisplayName:"",
     customerLinked:false,
@@ -1296,12 +1697,14 @@ function createManualReservation(timeClock,type,duration,location,shopName,opKey
     ops,
     extensionMin:0,
     tip:0,
+    memo:"",
+    cancelled:false,
     rawText:blockText
   };
 }
 
-function sortReservations(){
-  state.reservations.sort((a,b)=>(a.timeMin??0)-(b.timeMin??0));
+function sortReservationsForDate(dateId){
+  getReservationsForDate(dateId).sort((a,b)=>(a.timeMin??0)-(b.timeMin??0));
 }
 
 function initManualReservationForm(){
@@ -1321,11 +1724,9 @@ function initManualReservationForm(){
 
 function updateManualFormVisibility(){
   const type=document.getElementById("manual-type")?.value;
-  const loc=document.getElementById("manual-location")?.value;
   const customerWrap=document.getElementById("manual-customer-wrap");
-  const otherWrap=document.getElementById("manual-location-other-wrap");
   if(customerWrap)customerWrap.style.display=type==="本指名"?"block":"none";
-  if(otherWrap)otherWrap.style.display=loc==="その他H"?"block":"none";
+  updateLocationOtherWrap("manual");
   if(type!=="本指名"){
     manualSelectedCustomerId=null;
     const search=document.getElementById("manual-customer-search");
@@ -1338,12 +1739,12 @@ function addManualReservation(){
   const timeClock=document.getElementById("manual-time").value;
   const type=document.getElementById("manual-type").value;
   const duration=parseInt(document.getElementById("manual-duration").value,10);
-  let location=document.getElementById("manual-location").value;
-  if(location==="その他H"){
-    const other=document.getElementById("manual-location-other").value.trim();
-    if(!other)return;
-    location=other;
-  }
+  const locFields=resolveLocationFromForm(
+    document.getElementById("manual-location").value,
+    document.getElementById("manual-location-other").value
+  );
+  if(!locFields)return;
+  const location=locFields.location;
   const opKeys=getSelectedManualOps();
   let shopName="";
   let customerId=null;
@@ -1357,8 +1758,9 @@ function addManualReservation(){
   }
   const blockText=buildManualReservationText(timeClock,type,duration,location,shopName,opKeys);
   const reservation=createManualReservation(timeClock,type,duration,location,shopName,opKeys,customerId);
-  state.reservations.push(reservation);
-  sortReservations();
+  const dateId=getSelectedScheduleDateId();
+  getReservationsForDate(dateId).push(reservation);
+  sortReservationsForDate(dateId);
   const ta=document.getElementById("schedule-input");
   ta.value=(ta.value.trim()?ta.value.trim()+"\n\n":"")+blockText;
   if(type==="本指名"&&linkedCustomer){
@@ -1377,42 +1779,38 @@ function reservationHonKey(r){
   return[r.timeStr,r.type,r.customerName||"",r.duration,r.location].join("|");
 }
 
-function parseReservations(text){
-  reservationIdSeq = 1;
-  const lines=text.split(/\r?\n/);
-  const results=[];
-  let i=0;
+function parseReservationBlock(line,lines,startIdx){
+  const mainMatch=line.match(/(\d{1,2}時\d{1,2}分)\s+(フリー|写指|本指名)\s+(\d+(?:\+\d+)?分)\s+(.+)/);
+  if(!mainMatch)return null;
+  const timeStr=mainMatch[1];
+  const type=mainMatch[2];
+  const durInfo=parseDurationStr(mainMatch[3]);
+  const location=mainMatch[4].trim();
+  let extras="";
+  let customerName="";
+  let i=startIdx+1;
   while(i<lines.length){
-    const line=lines[i].trim();
+    const next=lines[i].trim();
+    if(!next){i++;continue}
+    if(next.match(/\d{1,2}時\d{1,2}分\s+(フリー|写指|本指名)/))break;
+    if(detectScheduleHeaderDate(next))break;
+    extras+=next+" ";
+    const nameMatch=next.match(/※\s*(.+?)様/);
+    if(nameMatch)customerName=nameMatch[1].trim();
     i++;
-    if(!line||line.includes("本日の予約"))continue;
-    const mainMatch=line.match(/(\d{1,2}時\d{1,2}分)\s+(フリー|写指|本指名)\s+(\d+(?:\+\d+)?分)\s+(.+)/);
-    if(!mainMatch)continue;
-    const timeStr=mainMatch[1];
-    const type=mainMatch[2];
-    const durInfo=parseDurationStr(mainMatch[3]);
-    const location=mainMatch[4].trim();
-    let extras="";
-    let customerName="";
-    while(i<lines.length){
-      const next=lines[i].trim();
-      if(!next){i++;continue}
-      if(next.match(/\d{1,2}時\d{1,2}分\s+(フリー|写指|本指名)/))break;
-      extras+=next+" ";
-      const nameMatch=next.match(/※\s*(.+?)様/);
-      if(nameMatch)customerName=nameMatch[1].trim();
-      i++;
-    }
-    const fullText=line+" "+extras;
-    const ops=detectOps(fullText);
-    results.push({
-      id: reservationIdSeq++,
+  }
+  const fullText=line+" "+extras;
+  const ops=detectOps(fullText);
+  return{
+    reservation:{
+      id:0,
       timeStr,timeMin:parseTimeStr(timeStr),
       type,
       duration:durInfo.duration,
       serviceMin:durInfo.serviceMin,
       durationLabel:durInfo.durationLabel,
       location,
+      locationType:inferLocationType(location),
       customerName,
       guestDisplayName:"",
       customerLinked:false,
@@ -1420,41 +1818,118 @@ function parseReservations(text){
       ops,
       extensionMin:0,
       tip:0,
+      memo:"",
+      cancelled:false,
       rawText:fullText.trim()
+    },
+    nextIdx:i
+  };
+}
+
+function parseScheduleByDate(text){
+  let nextId=reservationIdSeq;
+  const lines=text.split(/\r?\n/);
+  const result={};
+  let currentDateId=getTodayBizId();
+  let i=0;
+  while(i<lines.length){
+    const line=lines[i].trim();
+    if(!line){i++;continue}
+    const headerDate=detectScheduleHeaderDate(line);
+    if(headerDate){
+      currentDateId=headerDate;
+      i++;
+      continue;
+    }
+    const block=parseReservationBlock(line,lines,i);
+    if(!block){i++;continue}
+    block.reservation.id=nextId++;
+    if(!result[currentDateId])result[currentDateId]=[];
+    result[currentDateId].push(block.reservation);
+    i=block.nextIdx;
+  }
+  reservationIdSeq=nextId;
+  for(const dateId of Object.keys(result)){
+    result[dateId].sort((a,b)=>(a.timeMin??0)-(b.timeMin??0));
+  }
+  return result;
+}
+
+function mergeReservationMeta(oldList,newList){
+  const oldMeta=new Map();
+  for(const r of oldList){
+    oldMeta.set(reservationHonKey(r),{
+      tip:r.tip,
+      extensionMin:r.extensionMin,
+      guestDisplayName:r.guestDisplayName,
+      customerLinked:r.customerLinked,
+      linkedCustomerId:r.linkedCustomerId,
+      memo:r.memo,
+      cancelled:r.cancelled
     });
   }
-  results.sort((a,b)=>{
-    const ta=a.timeMin??parseTimeStr(a.timeStr)??0;
-    const tb=b.timeMin??parseTimeStr(b.timeStr)??0;
-    return ta-tb;
-  });
-  return results;
+  for(const r of newList){
+    const old=oldMeta.get(reservationHonKey(r));
+    if(!old)continue;
+    if(old.tip)r.tip=old.tip;
+    if(old.extensionMin)r.extensionMin=old.extensionMin;
+    if(old.guestDisplayName)r.guestDisplayName=old.guestDisplayName;
+    if(old.customerLinked){
+      r.customerLinked=old.customerLinked;
+      r.linkedCustomerId=old.linkedCustomerId;
+    }
+    if(old.memo)r.memo=old.memo;
+    if(old.cancelled)r.cancelled=old.cancelled;
+    migrateReservation(r);
+  }
+  return newList;
+}
+
+function parseReservations(text){
+  const byDate=parseScheduleByDate(text);
+  return byDate[getTodayBizId()]||[];
+}
+
+function calcHonForReservations(reservations){
+  let total=0;
+  for(const r of filterActiveReservations(reservations)){
+    const totalMin=r.duration+(r.type==="本指名"?r.extensionMin:0);
+    total+=calcHonShimei(r.type,totalMin);
+  }
+  return total;
+}
+
+function calcReservationTipTotalFor(reservations){
+  return filterActiveReservations(reservations).reduce((s,r)=>s+(r.tip||0),0);
+}
+
+function calcTotalsForReservations(reservations,options){
+  const opts=options||{};
+  const includeSettingTip=opts.includeSettingTip!==false;
+  const includeMonthlyBase=opts.includeMonthlyBase!==false;
+  const active=filterActiveReservations(reservations);
+  let gross=0;
+  for(const r of active){
+    gross+=calcReservationEarnings(r).total;
+  }
+  const dayHon=calcHonForReservations(reservations);
+  const honCount=includeMonthlyBase?state.monthlyBase+dayHon:dayHon;
+  const zappi=calcZappi(gross);
+  const tipTotal=calcReservationTipTotalFor(reservations)+(includeSettingTip?state.tip||0:0);
+  const net=gross-zappi+tipTotal;
+  return{gross,zappi,net,honCount,dayHon,tipTotal};
 }
 
 function calcTodayHon(){
-  let today=0;
-  for(const r of state.reservations){
-    const totalMin=r.duration+(r.type==="本指名"?r.extensionMin:0);
-    today+=calcHonShimei(r.type,totalMin);
-  }
-  return today;
+  return calcHonForReservations(getTodayReservations());
 }
 
 function calcReservationTipTotal(){
-  return state.reservations.reduce((s,r)=>s+(r.tip||0),0);
+  return calcReservationTipTotalFor(getTodayReservations());
 }
 
 function calcTotals(){
-  let gross=0;
-  for(const r of state.reservations){
-    gross+=calcReservationEarnings(r).total;
-  }
-  const todayHon=calcTodayHon();
-  const honCount=state.monthlyBase+todayHon;
-  const zappi=calcZappi(gross);
-  const tipTotal=calcReservationTipTotal()+(state.tip||0);
-  const net=gross-zappi+tipTotal;
-  return{gross,zappi,net,honCount,todayHon,tipTotal};
+  return calcTotalsForReservations(getTodayReservations(),{includeSettingTip:true,includeMonthlyBase:true});
 }
 
 function formatNextMonthRank(tier,prefix){
@@ -1495,13 +1970,15 @@ function getNextMonthRankInfo(honCount){
 }
 
 function renderHome(){
-  const t=calcTotals();
-  const freeInfo=calcFreeSlots();
+  const todayRes=getTodayReservations();
+  const t=calcTotalsForReservations(todayRes,{includeSettingTip:true,includeMonthlyBase:true});
+  const freeInfo=calcFreeSlots(todayRes);
   const rankInfo=getNextMonthRankInfo(t.honCount);
   document.getElementById("home-current-rank").textContent=state.rank;
   document.getElementById("home-next-month-rank").textContent=formatNextMonthRank(rankInfo.achieved,false);
   document.getElementById("home-hon-count").textContent=t.honCount;
-  document.getElementById("home-schedule-count").textContent=state.reservations.length;
+  document.getElementById("home-schedule-count").textContent=filterActiveReservations(todayRes).length;
+  document.getElementById("home-tomorrow-count").textContent=filterActiveReservations(getReservationsForDate(getTomorrowBizId())).length;
   document.getElementById("home-gross").textContent=fmt(t.gross);
   document.getElementById("home-zappi").textContent="-"+fmt(t.zappi);
   document.getElementById("home-tip").textContent="+"+fmt(t.tipTotal);
@@ -1538,19 +2015,20 @@ function renderHome(){
     }
   }
   const listEl=document.getElementById("home-schedule-list");
-  if(!state.reservations.length){
+  if(!todayRes.length){
     listEl.innerHTML='<div class="empty-state">予定タブで予約表を読み込んでください</div>';
     return;
   }
-  listEl.innerHTML=state.reservations.map(r=>{
-    const e=calcReservationEarnings(r);
+  listEl.innerHTML=todayRes.map(r=>{
+    const e=r.cancelled?{total:0,course:0,ext:0}:calcReservationEarnings(r);
     const durDisplay=r.durationLabel+(r.extensionMin>0?" (+延長"+r.extensionMin+"分)":"");
     const customerSub=renderReservationNameInline(r);
-    return`<div class="schedule-item">
+    const memoLine=formatReservationMemoLine(r.memo);
+    return`<div class="schedule-item${r.cancelled?" cancelled":""}">
       <div class="schedule-time">${fmtReservationTimeDisplay(r.timeStr)}</div>
       <div class="schedule-info">
-        <strong>${r.type}</strong> ${durDisplay} ${r.location}
-        <div class="sub">${customerSub?customerSub+" · ":""}${fmt(e.total)}</div>
+        <strong>${r.type}</strong>${r.cancelled?' <span class="reservation-cancel-badge">キャンセル</span>':""} ${durDisplay} 場所：${r.location}
+        <div class="sub">${customerSub?customerSub+" · ":""}${memoLine?memoLine+" · ":""}${r.cancelled?"—":fmt(e.total)}</div>
       </div>
     </div>`;
   }).join("");
@@ -1562,56 +2040,103 @@ function typeClass(type){
   return"type-free";
 }
 
+function renderScheduleDateTabs(){
+  const el=document.getElementById("schedule-date-tabs");
+  if(!el)return;
+  const selected=getSelectedScheduleDateId();
+  const ids=getAllScheduleDateIds();
+  el.innerHTML=ids.map(id=>`
+    <button type="button" class="btn btn-sm btn-outline schedule-date-tab${id===selected?" active":""}" data-date-id="${id}">${formatDateTabLabel(id)}</button>
+  `).join("");
+  el.querySelectorAll(".schedule-date-tab").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      setSelectedScheduleDateId(btn.dataset.dateId);
+      renderAll();
+    });
+  });
+  const picker=document.getElementById("schedule-date-picker");
+  if(picker){
+    picker.value=selected;
+    if(!picker.dataset.ready){
+      picker.dataset.ready="1";
+      picker.addEventListener("change",()=>{
+        if(picker.value){
+          setSelectedScheduleDateId(picker.value);
+          renderAll();
+        }
+      });
+    }
+  }
+}
+
+function renderScheduleDayStats(){
+  const el=document.getElementById("schedule-day-stats");
+  if(!el)return;
+  const dateId=getSelectedScheduleDateId();
+  const reservations=getReservationsForDate(dateId);
+  const active=filterActiveReservations(reservations);
+  const isToday=dateId===getTodayBizId();
+  const t=calcTotalsForReservations(reservations,{
+    includeSettingTip:isToday,
+    includeMonthlyBase:isToday
+  });
+  const freeInfo=calcFreeSlots(reservations);
+  el.style.display="block";
+  el.innerHTML=`
+    <div class="card-title">${formatDateTabLabel(dateId)}の予定（${active.length}件${reservations.length!==active.length?" / 全"+reservations.length+"件":""}）</div>
+    <div class="card-row"><span class="card-row-label">売上予想</span><span class="card-row-value">${fmt(t.net)}</span></div>
+    <div class="card-row"><span class="card-row-label">本指名</span><span class="card-row-value">${isToday?t.honCount:t.dayHon}本${isToday?"（今月）":""}</span></div>
+    <div class="card-row"><span class="card-row-label">空き枠</span><span class="card-row-value">${freeInfo.slots.length?freeInfo.slots.length+"枠":"なし"}</span></div>`;
+}
+
 function renderReservations(){
+  renderScheduleDateTabs();
+  renderScheduleDayStats();
+  const reservations=getActiveReservations();
   const el=document.getElementById("reservation-list");
-  if(!state.reservations.length){
+  if(!reservations.length){
     el.innerHTML=`<div class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
       <p>予約表を貼り付けて<br>「読み込む」をタップ</p></div>`;
     return;
   }
-  el.innerHTML=state.reservations.map(r=>{
+  el.innerHTML=reservations.map(r=>{
     const honMin=r.type==="本指名"?r.duration+r.extensionMin:r.duration;
-    const hon=calcHonShimei(r.type,honMin);
-    const e=calcReservationEarnings(r);
+    const hon=r.cancelled?0:calcHonShimei(r.type,honMin);
+    const e=r.cancelled?{total:0,course:0,ext:0,extMin:0}:calcReservationEarnings(r);
     const opsHtml=r.ops.length?`<div class="reservation-ops">${r.ops.map(o=>`<span class="op-tag">${o.key} ${fmt(o.price)}</span>`).join("")}</div>`:"";
     const extNote=r.extensionMin>0?` <span style="color:var(--pink)">(+延長${r.extensionMin}分)</span>`:"";
     const tab=reservationTabs[r.id]||"extend";
-    const tipSavedHtml=(r.tip||0)>0?`<div class="tip-saved">チップ +${(r.tip||0).toLocaleString("ja-JP")}円</div>`:"";
+    const tipHtml=(r.tip||0)>0?`<div class="tip-saved">チップ +${(r.tip||0).toLocaleString("ja-JP")}円</div>`:"";
     const customerHtml=renderReservationNameHtml(r);
-    const nameEditPanel=buildNameEditPanel(r);
-    return`<div class="reservation-card" data-id="${r.id}">
+    const memoLine=formatReservationMemoLine(r.memo);
+    const cancelBadge=r.cancelled?`<span class="reservation-cancel-badge">キャンセル</span>`:"";
+    return`<div class="reservation-card${r.cancelled?" cancelled":""}" data-id="${r.id}">
       <div class="reservation-header">
-        <div class="reservation-time">${fmtReservationTimeDisplay(r.timeStr)}</div>
+        <div class="reservation-time">${fmtReservationTimeDisplay(r.timeStr)}${cancelBadge}</div>
         <span class="reservation-type ${typeClass(r.type)}">${r.type}</span>
       </div>
       <div class="reservation-detail">
-        <strong>${r.durationLabel}</strong>${extNote} · ${r.location}<br>
+        <strong>${r.durationLabel}</strong>${extNote}<br>
+        場所：${r.location}<br>
         ${customerHtml?customerHtml+"<br>":""}
-        <button type="button" class="btn btn-sm btn-outline name-edit-btn" data-res-id="${r.id}" style="margin-top:6px;width:auto">名前を編集</button>
-        ${nameEditPanel}
+        ${memoLine?`<div style="font-size:12px;color:var(--text-muted);margin:6px 0">メモ: ${memoLine}</div>`:""}
+        <button type="button" class="btn btn-sm btn-outline reservation-edit-btn" data-res-id="${r.id}" style="margin-top:6px;width:auto">予約を編集</button>
+        ${r.cancelled?`<button type="button" class="btn btn-sm btn-outline reservation-uncancel-btn" data-res-id="${r.id}" style="margin-top:6px;width:auto;margin-left:6px">キャンセル解除</button>`:""}
         本指名: ${hon}本<br>
-        コース（${r.duration}分）${fmt(e.course)}${e.ext > 0 ? " + 延長（" + e.extMin + "分）" + fmt(e.ext) : ""}
+        コース（${r.duration}分）${r.cancelled?"—":fmt(e.course)}${!r.cancelled&&e.ext > 0 ? " + 延長（" + e.extMin + "分）" + fmt(e.ext) : ""}
       </div>
       ${opsHtml}
-      <div class="reservation-earnings"><span>売上</span><span>${fmt(e.total)}</span></div>
-      ${tipSavedHtml}
+      <div class="reservation-earnings"><span>売上</span><span>${r.cancelled?"—":fmt(e.total)}</span></div>
+      ${tipHtml}
       <div class="card-tabs">
         <button class="btn btn-sm btn-outline card-tab${tab==="extend"?" active":""}" data-id="${r.id}" data-tab="extend">延長</button>
-        <button class="btn btn-sm btn-outline card-tab${tab==="tip"?" active":""}" data-id="${r.id}" data-tab="tip">チップ</button>
       </div>
       <div class="extend-panel" style="display:${tab==="extend"?"block":"none"}">
         <div class="extend-btns">
           <button class="btn btn-sm btn-outline extend-btn" data-id="${r.id}" data-min="30">延長30分</button>
           <button class="btn btn-sm btn-outline extend-btn" data-id="${r.id}" data-min="60">延長60分</button>
           <button class="btn btn-sm btn-outline extend-btn" data-id="${r.id}" data-min="90">延長90分</button>
-        </div>
-      </div>
-      <div class="tip-panel" style="display:${tab==="tip"?"block":"none"}">
-        <div class="tip-panel-label">このお客様からのチップ</div>
-        <div class="tip-input-row">
-          <input type="number" class="tip-input" data-id="${r.id}" value="${r.tip||0}" min="0" step="1000" placeholder="0">
-          <button class="btn btn-sm btn-primary tip-save-btn" data-id="${r.id}">保存</button>
         </div>
       </div>
     </div>`;
@@ -1626,22 +2151,8 @@ function renderReservations(){
     btn.addEventListener("click",()=>{
       const id=parseInt(btn.dataset.id,10);
       const min=parseInt(btn.dataset.min,10);
-      const r=state.reservations.find(x=>x.id===id);
-      if(r){r.extensionMin+=min;saveState();renderAll()}
-    });
-  });
-  el.querySelectorAll(".tip-save-btn").forEach(btn=>{
-    btn.addEventListener("click",()=>{
-      const id=parseInt(btn.dataset.id,10);
-      const r=state.reservations.find(x=>x.id===id);
-      const input=el.querySelector('.tip-input[data-id="'+id+'"]');
-      if(r&&input){
-        const oldTip=r.tip||0;
-        r.tip=parseInt(input.value,10)||0;
-        applyReservationTipToCustomer(r,oldTip,r.tip);
-        saveState();
-        renderAll();
-      }
+      const r=findReservationById(id);
+      if(r&&!r.cancelled){r.extensionMin+=min;saveState();renderAll()}
     });
   });
 }
@@ -1806,30 +2317,14 @@ function showCustomerModal(shopName,matches,onResolved){
 function loadSchedule(){
   const text=document.getElementById("schedule-input").value.trim();
   if(!text)return;
-  const oldMeta=new Map();
-  for(const r of state.reservations){
-    const k=reservationHonKey(r);
-    oldMeta.set(k,{
-      tip:r.tip,
-      extensionMin:r.extensionMin,
-      guestDisplayName:r.guestDisplayName,
-      customerLinked:r.customerLinked,
-      linkedCustomerId:r.linkedCustomerId
-    });
+  const parsed=parseScheduleByDate(text);
+  for(const dateId of Object.keys(parsed)){
+    const oldList=getReservationsForDate(dateId);
+    state.reservationsByDate[dateId]=mergeReservationMeta(oldList,parsed[dateId]);
   }
-  state.reservations=parseReservations(text);
-  for(const r of state.reservations){
-    const k=reservationHonKey(r);
-    const old=oldMeta.get(k);
-    if(!old)continue;
-    if(old.tip)r.tip=old.tip;
-    if(old.extensionMin)r.extensionMin=old.extensionMin;
-    if(old.guestDisplayName)r.guestDisplayName=old.guestDisplayName;
-    if(old.customerLinked){
-      r.customerLinked=old.customerLinked;
-      r.linkedCustomerId=old.linkedCustomerId;
-    }
-    migrateReservation(r);
+  const parsedDates=Object.keys(parsed).sort();
+  if(parsedDates.length&&!parsedDates.includes(getSelectedScheduleDateId())){
+    setSelectedScheduleDateId(parsedDates[0]);
   }
   saveState();
   renderAll();
@@ -1837,52 +2332,17 @@ function loadSchedule(){
 
 function initReservationListEvents(){
   const el=document.getElementById("reservation-list");
-  if(!el||el.dataset.nameEditReady)return;
-  el.dataset.nameEditReady="1";
+  if(!el||el.dataset.resEditReady)return;
+  el.dataset.resEditReady="1";
   el.addEventListener("click",e=>{
-    const editBtn=e.target.closest(".name-edit-btn");
+    const editBtn=e.target.closest(".reservation-edit-btn");
     if(editBtn){
-      const resId=parseInt(editBtn.dataset.resId,10);
-      const r=state.reservations.find(x=>x.id===resId);
-      if(!r)return;
-      editingNameReservationId=resId;
-      nameEditSelectedCustomerId=r.linkedCustomerId||null;
-      nameEditQuery[resId]=r.guestDisplayName||r.customerName||"";
-      nameEditNewMode[resId]=false;
-      renderReservations();
+      openReservationEditModal(parseInt(editBtn.dataset.resId,10));
       return;
     }
-    const pickBtn=e.target.closest(".name-pick-item");
-    if(pickBtn){
-      nameEditSelectedCustomerId=parseInt(pickBtn.dataset.cid,10);
-      nameEditNewMode[parseInt(pickBtn.dataset.resId,10)]=false;
-      renderReservations();
-      return;
-    }
-    const newBtn=e.target.closest(".name-edit-new-btn");
-    if(newBtn){
-      const resId=parseInt(newBtn.dataset.resId,10);
-      nameEditNewMode[resId]=true;
-      nameEditSelectedCustomerId=null;
-      renderReservations();
-      return;
-    }
-    const saveBtn=e.target.closest(".name-edit-save-btn");
-    if(saveBtn){
-      saveReservationNameConfirm(parseInt(saveBtn.dataset.resId,10));
-    }
-  });
-  el.addEventListener("input",e=>{
-    const input=e.target.closest(".name-edit-input");
-    if(!input)return;
-    const resId=parseInt(input.dataset.resId,10);
-    nameEditQuery[resId]=input.value;
-    nameEditSelectedCustomerId=null;
-    nameEditNewMode[resId]=false;
-    const resultsEl=el.querySelector(`.name-edit-results[data-res-id="${resId}"]`);
-    const r=state.reservations.find(x=>x.id===resId);
-    if(resultsEl&&r&&r.type==="本指名"&&!r.customerLinked){
-      resultsEl.innerHTML=buildNameEditResultsHtml(r,input.value.trim());
+    const uncancelBtn=e.target.closest(".reservation-uncancel-btn");
+    if(uncancelBtn){
+      toggleReservationCancelled(parseInt(uncancelBtn.dataset.resId,10));
     }
   });
 }
@@ -1948,6 +2408,40 @@ document.getElementById("schedule-input").addEventListener("input",()=>{saveStat
 document.getElementById("customer-modal").addEventListener("click",e=>{
   if(e.target.id==="customer-modal")e.target.classList.remove("show");
 });
+document.getElementById("btn-save-reservation-edit").addEventListener("click",saveReservationEdit);
+document.getElementById("btn-cancel-reservation-edit").addEventListener("click",()=>{
+  const r=findReservationById(editingReservationId);
+  if(r){
+    r.cancelled=!r.cancelled;
+    saveState();
+  }
+  editingReservationId=null;
+  document.getElementById("reservation-edit-modal").classList.remove("show");
+  renderAll();
+});
+document.getElementById("btn-delete-reservation-edit").addEventListener("click",()=>{
+  if(editingReservationId)openReservationDeleteConfirm(editingReservationId);
+});
+document.getElementById("btn-confirm-delete-reservation").addEventListener("click",confirmDeleteReservation);
+document.getElementById("btn-abort-delete-reservation").addEventListener("click",()=>{
+  pendingDeleteReservationId=null;
+  document.getElementById("reservation-delete-modal").classList.remove("show");
+});
+document.getElementById("edit-res-location").addEventListener("change",()=>{
+  updateLocationOtherWrap("edit-res");
+});
+document.getElementById("reservation-edit-modal").addEventListener("click",e=>{
+  if(e.target.id==="reservation-edit-modal"){
+    editingReservationId=null;
+    e.target.classList.remove("show");
+  }
+});
+document.getElementById("reservation-delete-modal").addEventListener("click",e=>{
+  if(e.target.id==="reservation-delete-modal"){
+    pendingDeleteReservationId=null;
+    e.target.classList.remove("show");
+  }
+});
 
 const loaded=loadState();
 initManualReservationForm();
@@ -1956,7 +2450,7 @@ const scheduleInput=document.getElementById("schedule-input");
 if(!loaded&&!scheduleInput.value.trim()){
   scheduleInput.value=SAMPLE_TEXT;
   loadSchedule();
-}else if(scheduleInput.value.trim()&&!state.reservations.length){
+}else if(scheduleInput.value.trim()&&!hasAnyReservations()){
   loadSchedule();
 }
 restoreActiveTab();
