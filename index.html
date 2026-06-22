@@ -231,6 +231,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .reservation-card.cancelled{opacity:.65;border-color:rgba(158,158,158,.3)}
 .reservation-cancel-badge{display:inline-block;font-size:11px;font-weight:700;color:#fff;background:#9a8490;padding:3px 10px;border-radius:20px;margin-left:8px}
 .customer-card-actions{display:flex;gap:8px;margin-top:12px}
+.reservation-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.reservation-actions .btn{width:auto;flex:1 1 30%;min-width:88px;padding:8px 10px;font-size:12px}
 .customer-card-actions .btn{flex:1}
 .modal-overlay{
   position:fixed;inset:0;background:rgba(61,44,53,.4);
@@ -616,6 +618,58 @@ input[type="number"]{padding-left:28px}
   </div>
 </div>
 
+<!-- 名前編集モーダル -->
+<div class="modal-overlay" id="reservation-name-edit-modal">
+  <div class="modal">
+    <div class="modal-title">名前を編集</div>
+    <div id="name-edit-hon-wrap">
+      <div class="form-group">
+        <label class="form-label">顧客を検索</label>
+        <input type="text" id="name-edit-search" placeholder="表示名・店登録名・メモで検索">
+      </div>
+      <div id="name-edit-results" class="customer-search-results"></div>
+      <button type="button" class="btn btn-outline" id="btn-name-edit-new-customer" style="width:100%;margin-top:8px">新しい顧客として登録</button>
+      <div id="name-edit-new-panel" style="display:none;margin-top:12px">
+        <div class="form-group">
+          <label class="form-label">表示名</label>
+          <input type="text" id="name-edit-new-display" placeholder="例: コイケ黒メガネ">
+        </div>
+        <div class="form-group">
+          <label class="form-label">店登録名</label>
+          <input type="text" id="name-edit-new-shop" placeholder="例: コイケ">
+        </div>
+        <div class="form-group">
+          <label class="form-label">自由メモ</label>
+          <textarea id="name-edit-new-memo" rows="4" placeholder="例:&#10;・黒メガネ&#10;・不動産"></textarea>
+        </div>
+      </div>
+    </div>
+    <div id="name-edit-display-wrap" style="display:none">
+      <div class="form-group">
+        <label class="form-label">表示名</label>
+        <input type="text" id="name-edit-display-only" placeholder="名前を入力">
+      </div>
+    </div>
+    <button class="btn btn-gold" id="btn-save-name-edit">保存</button>
+  </div>
+</div>
+
+<!-- メモ編集モーダル -->
+<div class="modal-overlay" id="reservation-memo-modal">
+  <div class="modal">
+    <div class="modal-title">メモ</div>
+    <div class="form-group">
+      <label class="form-label">予約メモ</label>
+      <textarea id="res-memo-edit" rows="5" placeholder="この予約だけのメモ"></textarea>
+    </div>
+    <div class="form-group" id="res-customer-memo-wrap" style="display:none">
+      <label class="form-label">顧客メモ</label>
+      <textarea id="res-customer-memo-edit" rows="5" placeholder="顧客に長期保存するメモ"></textarea>
+    </div>
+    <button class="btn btn-gold" id="btn-save-res-memo">保存</button>
+  </div>
+</div>
+
 <script>
 (function(){
 "use strict";
@@ -684,8 +738,8 @@ let manualSelectedCustomerId = null;
 let editingCustomerId = null;
 let editingNameReservationId = null;
 let nameEditSelectedCustomerId = null;
-const nameEditQuery = {};
-const nameEditNewMode = {};
+let nameEditNewCustomerMode = false;
+let editingMemoReservationId = null;
 let editingReservationId = null;
 let pendingDeleteReservationId = null;
 
@@ -1226,13 +1280,13 @@ function searchCustomers(query){
   const key=toSearchKey(query.trim());
   let list=state.customers.slice();
   if(key){
-    list=list.filter(c=>toSearchKey(c.shopName).includes(key)||toSearchKey(c.displayName).includes(key));
+    list=list.filter(c=>toSearchKey(c.shopName).includes(key)||toSearchKey(c.displayName).includes(key)||toSearchKey(c.memo).includes(key));
   }
   list.sort((a,b)=>getCustomerHonCount(b)-getCustomerHonCount(a));
   return list;
 }
 
-function createCustomer(shopName,displayName){
+function createCustomer(shopName,displayName,memo){
   const customer={
     id:customerIdSeq++,
     shopName:shopName.trim(),
@@ -1242,7 +1296,7 @@ function createCustomer(shopName,displayName){
     totalTips:0,
     maxCourse:0,
     lastCourse:"",
-    memo:""
+    memo:(memo||"").trim()
   };
   state.customers.push(customer);
   saveState();
@@ -1490,6 +1544,7 @@ function migrateReservation(r){
   if(r.source==null){
     r.source=(r.manualAdded||r.rawText&&r.rawText.includes("手入力追加"))?"manual":"paste";
   }
+  if(r.customerStatsApplied==null)r.customerStatsApplied=!!r.customerLinked;
 }
 
 function escAttr(s){
@@ -1507,11 +1562,11 @@ function renderReservationNameHtml(r){
       const c=getReservationCustomer(r);
       const display=r.guestDisplayName||getCustomerDisplayName(c);
       const shop=c?c.shopName:r.customerName;
-      return`<strong>${display}様</strong><br><span style="font-size:12px;color:var(--text-muted)">店登録名: ${shop}</span>`;
+      return`顧客：${display}<br><span style="font-size:12px;color:var(--text-muted)">店登録名：${shop}</span>`;
     }
     const provisional=r.customerName||r.guestDisplayName;
     if(provisional){
-      return`<span style="color:var(--text-muted)">仮名：${provisional}様</span><br><span style="font-size:12px;color:var(--pink)">未確定</span>`;
+      return`<span style="color:var(--text-muted)">仮名：${provisional}様</span>`;
     }
     return`<span style="font-size:12px;color:var(--text-muted)">名前未入力</span>`;
   }
@@ -1524,77 +1579,157 @@ function renderReservationNameInline(r){
   if(r.type==="本指名"){
     if(r.customerLinked&&r.linkedCustomerId){
       const c=getReservationCustomer(r);
-      return formatCustomerNameInline(c,r.customerName);
+      const display=r.guestDisplayName||getCustomerDisplayName(c);
+      const shop=c?c.shopName:r.customerName;
+      return`顧客：${display} <span style="font-size:11px;color:var(--text-muted)">（店登録名：${shop}）</span>`;
     }
     const provisional=r.customerName||r.guestDisplayName;
-    if(provisional)return`仮名：${provisional}様 <span style="font-size:11px;color:var(--pink)">（未確定）</span>`;
+    if(provisional)return`仮名：${provisional}様`;
     return"";
   }
   const name=r.guestDisplayName||r.customerName;
   return name?name+"様":"";
 }
 
-function buildNameEditResultsHtml(r,query){
+function renderNameEditModalResults(query){
+  const el=document.getElementById("name-edit-results");
+  if(!el)return;
   const results=searchCustomers(query);
-  const selected=nameEditSelectedCustomerId;
   let html=results.map(c=>`
-    <button type="button" class="customer-search-item name-pick-item${selected===c.id?" selected":""}" data-res-id="${r.id}" data-cid="${c.id}">
+    <button type="button" class="customer-search-item name-pick-item${nameEditSelectedCustomerId===c.id?" selected":""}" data-cid="${c.id}">
       <div class="customer-search-item-name">${getCustomerDisplayName(c)}（本指名${getCustomerHonCount(c)}回）</div>
       <div class="customer-search-item-sub">店登録名: ${c.shopName}</div>
     </button>`).join("");
-  if(query){
-    html+=`<button type="button" class="btn btn-sm btn-outline name-edit-new-btn" data-res-id="${r.id}" style="width:100%;margin-top:8px">新しい「${escAttr(query)}」として登録</button>`;
-  }
-  return html;
+  el.innerHTML=html;
+  el.querySelectorAll(".name-pick-item").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      nameEditSelectedCustomerId=parseInt(btn.dataset.cid,10);
+      nameEditNewCustomerMode=false;
+      document.getElementById("name-edit-new-panel").style.display="none";
+      renderNameEditModalResults(document.getElementById("name-edit-search").value);
+    });
+  });
 }
 
-function buildNameEditPanel(r){
-  if(editingNameReservationId!==r.id)return"";
-  const query=nameEditQuery[r.id]!==undefined?nameEditQuery[r.id]:(r.guestDisplayName||r.customerName||"");
-  if(r.type==="本指名"&&!r.customerLinked){
-    const shopDefault=r.customerName||query;
-    const newOpen=!!nameEditNewMode[r.id];
-    return`<div class="name-edit-panel tip-panel" style="margin-top:10px">
-      <div class="tip-panel-label">表示名</div>
-      <input type="text" class="name-edit-input" data-res-id="${r.id}" value="${escAttr(query)}" placeholder="例: マキノ黒メガネ">
-      <div class="name-edit-results customer-search-results" data-res-id="${r.id}">${buildNameEditResultsHtml(r,query)}</div>
-      <div class="name-edit-new-panel" data-res-id="${r.id}" style="display:${newOpen?"block":"none"};margin-top:10px">
-        <div class="form-group" style="margin-bottom:10px">
-          <label class="form-label">店登録名</label>
-          <input type="text" class="name-edit-shop" data-res-id="${r.id}" value="${escAttr(shopDefault)}" placeholder="例: マキノ">
-        </div>
-        <div class="form-group" style="margin-bottom:10px">
-          <label class="form-label">表示名</label>
-          <input type="text" class="name-edit-display" data-res-id="${r.id}" value="${escAttr(query)}" placeholder="例: マキノ黒メガネ">
-        </div>
-      </div>
-      <button type="button" class="btn btn-sm btn-primary name-edit-save-btn" data-res-id="${r.id}" style="margin-top:8px;width:100%">保存</button>
-    </div>`;
+function openReservationNameEditModal(resId){
+  const r=findReservationById(resId);
+  if(!r)return;
+  editingNameReservationId=resId;
+  nameEditSelectedCustomerId=null;
+  nameEditNewCustomerMode=false;
+  const honWrap=document.getElementById("name-edit-hon-wrap");
+  const displayWrap=document.getElementById("name-edit-display-wrap");
+  const newPanel=document.getElementById("name-edit-new-panel");
+  if(r.type==="本指名"){
+    honWrap.style.display="block";
+    displayWrap.style.display="none";
+    newPanel.style.display="none";
+    const query=r.guestDisplayName||r.customerName||"";
+    document.getElementById("name-edit-search").value=query;
+    document.getElementById("name-edit-new-display").value=query;
+    document.getElementById("name-edit-new-shop").value=r.customerName||query;
+    document.getElementById("name-edit-new-memo").value="";
+    renderNameEditModalResults(query);
+  }else{
+    honWrap.style.display="none";
+    displayWrap.style.display="block";
+    document.getElementById("name-edit-display-only").value=r.guestDisplayName||r.customerName||"";
   }
-  const val=r.guestDisplayName||r.customerName||"";
-  return`<div class="name-edit-panel tip-panel" style="margin-top:10px">
-    <div class="tip-panel-label">名前</div>
-    <input type="text" class="name-edit-input" data-res-id="${r.id}" value="${escAttr(val)}" placeholder="名前を入力">
-    <button type="button" class="btn btn-sm btn-primary name-edit-save-btn" data-res-id="${r.id}" style="margin-top:8px;width:100%">保存</button>
-  </div>`;
+  document.getElementById("reservation-name-edit-modal").classList.add("show");
 }
 
-function linkReservationToCustomer(r,customerId,displayName,shopName){
+function saveReservationNameEdit(){
+  const r=findReservationById(editingNameReservationId);
+  if(!r)return;
+  if(r.type!=="本指名"){
+    const name=document.getElementById("name-edit-display-only").value.trim();
+    saveReservationGuestName(r,name);
+    closeReservationNameEditModal();
+    renderAll();
+    return;
+  }
+  const query=document.getElementById("name-edit-search").value.trim();
+  if(nameEditNewCustomerMode){
+    const shop=document.getElementById("name-edit-new-shop").value.trim();
+    const display=document.getElementById("name-edit-new-display").value.trim();
+    const memo=document.getElementById("name-edit-new-memo").value.trim();
+    if(!shop)return;
+    linkReservationToCustomer(r,null,display||shop,shop,memo);
+    closeReservationNameEditModal();
+    renderAll();
+    return;
+  }
+  if(nameEditSelectedCustomerId){
+    const c=findCustomerById(nameEditSelectedCustomerId);
+    if(c){
+      linkReservationToCustomer(r,c.id,query||c.displayName,c.shopName);
+      closeReservationNameEditModal();
+      renderAll();
+      return;
+    }
+  }
+  saveReservationGuestName(r,query);
+  closeReservationNameEditModal();
+  renderAll();
+}
+
+function closeReservationNameEditModal(){
+  editingNameReservationId=null;
+  nameEditSelectedCustomerId=null;
+  nameEditNewCustomerMode=false;
+  document.getElementById("reservation-name-edit-modal").classList.remove("show");
+}
+
+function openReservationMemoModal(resId){
+  const r=findReservationById(resId);
+  if(!r)return;
+  editingMemoReservationId=resId;
+  document.getElementById("res-memo-edit").value=r.memo||"";
+  const customerWrap=document.getElementById("res-customer-memo-wrap");
+  const c=getReservationCustomer(r);
+  if(r.customerLinked&&c){
+    customerWrap.style.display="block";
+    document.getElementById("res-customer-memo-edit").value=c.memo||"";
+  }else{
+    customerWrap.style.display="none";
+    document.getElementById("res-customer-memo-edit").value="";
+  }
+  document.getElementById("reservation-memo-modal").classList.add("show");
+}
+
+function saveReservationMemoEdit(){
+  const r=findReservationById(editingMemoReservationId);
+  if(!r)return;
+  r.memo=document.getElementById("res-memo-edit").value;
+  r.rawText=rebuildReservationRawText(r);
+  const c=getReservationCustomer(r);
+  if(r.customerLinked&&c){
+    c.memo=document.getElementById("res-customer-memo-edit").value;
+  }
+  editingMemoReservationId=null;
+  document.getElementById("reservation-memo-modal").classList.remove("show");
+  notifyReservationListChanged();
+  saveState();
+  renderAll();
+}
+
+function linkReservationToCustomer(r,customerId,displayName,shopName,customerMemo){
   let customer;
   if(customerId){
     customer=findCustomerById(customerId);
     if(!customer)return false;
   }else{
     if(!shopName)return false;
-    customer=createCustomer(shopName,displayName||shopName);
-  }
-  if(!r.customerLinked){
-    updateCustomerStatsFromReservation(customer,r);
+    customer=createCustomer(shopName,displayName||shopName,customerMemo);
   }
   r.customerLinked=true;
   r.linkedCustomerId=customer.id;
   r.guestDisplayName=displayName||customer.displayName;
   r.customerName=shopName||customer.shopName;
+  if(!r.customerStatsApplied){
+    updateCustomerStatsFromReservation(customer,r);
+    r.customerStatsApplied=true;
+  }
   r.rawText=rebuildReservationRawText(r);
   notifyReservationListChanged();
   saveState();
@@ -1608,49 +1743,12 @@ function saveReservationGuestName(r,name){
   saveState();
 }
 
-function saveReservationNameConfirm(resId){
-  const r=findReservationById(resId);
-  if(!r)return;
-  const query=(nameEditQuery[resId]!==undefined?nameEditQuery[resId]:(r.guestDisplayName||r.customerName||"")).trim();
-  if(r.type!=="本指名"){
-    saveReservationGuestName(r,query);
-    editingNameReservationId=null;
-    nameEditSelectedCustomerId=null;
-    renderAll();
-    return;
-  }
-  if(r.customerLinked){
-    saveReservationGuestName(r,query);
-    editingNameReservationId=null;
-    renderAll();
-    return;
-  }
-  if(nameEditSelectedCustomerId){
-    const c=findCustomerById(nameEditSelectedCustomerId);
-    if(c){
-      linkReservationToCustomer(r,c.id,query||c.displayName,c.shopName);
-      editingNameReservationId=null;
-      nameEditSelectedCustomerId=null;
-      renderAll();
-      return;
-    }
-  }
-  if(nameEditNewMode[resId]){
-    const shopEl=document.querySelector(`.name-edit-shop[data-res-id="${resId}"]`);
-    const dispEl=document.querySelector(`.name-edit-display[data-res-id="${resId}"]`);
-    const shop=shopEl?shopEl.value.trim():"";
-    const display=dispEl?dispEl.value.trim():query;
-    if(!shop)return;
-    linkReservationToCustomer(r,null,display||shop,shop);
-    editingNameReservationId=null;
-    nameEditSelectedCustomerId=null;
-    nameEditNewMode[resId]=false;
-    renderAll();
-    return;
-  }
-  if(!query&&!nameEditNewMode[resId])return;
-  editingNameReservationId=null;
-  renderAll();
+function renderReservationActionButtons(r){
+  return`<div class="reservation-actions">
+    <button type="button" class="btn btn-sm btn-outline reservation-name-btn" data-res-id="${r.id}">名前を編集</button>
+    <button type="button" class="btn btn-sm btn-outline reservation-memo-btn" data-res-id="${r.id}">メモ</button>
+    <button type="button" class="btn btn-sm btn-outline reservation-edit-btn" data-res-id="${r.id}">予約を編集</button>
+  </div>`;
 }
 
 function formatCustomerNameBlock(c,fallbackShopName){
@@ -1776,6 +1874,7 @@ function createManualReservation(timeClock,type,duration,location,shopName,opKey
     guestDisplayName:"",
     customerLinked:false,
     linkedCustomerId:null,
+    customerStatsApplied:false,
     ops,
     extensionMin:0,
     tip:0,
@@ -1898,6 +1997,7 @@ function parseReservationBlock(line,lines,startIdx){
       guestDisplayName:"",
       customerLinked:false,
       linkedCustomerId:null,
+      customerStatsApplied:false,
       ops,
       extensionMin:0,
       tip:0,
@@ -1948,6 +2048,7 @@ function mergeReservationMeta(oldList,newList){
       guestDisplayName:r.guestDisplayName,
       customerLinked:r.customerLinked,
       linkedCustomerId:r.linkedCustomerId,
+      customerStatsApplied:r.customerStatsApplied,
       memo:r.memo,
       cancelled:r.cancelled
     });
@@ -1962,6 +2063,7 @@ function mergeReservationMeta(oldList,newList){
       r.customerLinked=old.customerLinked;
       r.linkedCustomerId=old.linkedCustomerId;
     }
+    if(old.customerStatsApplied)r.customerStatsApplied=old.customerStatsApplied;
     if(old.memo&&!r.memo)r.memo=old.memo;
     else if(old.memo&&r.memo&&r.memo.indexOf(old.memo)<0)r.memo=r.memo+"\n"+old.memo;
     if(old.cancelled)r.cancelled=old.cancelled;
@@ -2074,6 +2176,7 @@ function mergeManualWithPaste(manual,paste){
     guestDisplayName:paste.guestDisplayName||manual.guestDisplayName,
     customerLinked:manual.customerLinked,
     linkedCustomerId:manual.linkedCustomerId,
+    customerStatsApplied:manual.customerStatsApplied,
     ops:mergeReservationOps(manual.ops,paste.ops),
     extensionMin:manual.extensionMin||0,
     tip:(manual.tip>0)?manual.tip:(paste.tip||0),
@@ -2360,8 +2463,8 @@ function renderReservations(){
         場所：${r.location}<br>
         ${customerHtml?customerHtml+"<br>":""}
         ${memoLine?`<div style="font-size:12px;color:var(--text-muted);margin:6px 0">メモ: ${memoLine}</div>`:""}
-        <button type="button" class="btn btn-sm btn-outline reservation-edit-btn" data-res-id="${r.id}" style="margin-top:6px;width:auto">予約を編集</button>
-        ${r.cancelled?`<button type="button" class="btn btn-sm btn-outline reservation-uncancel-btn" data-res-id="${r.id}" style="margin-top:6px;width:auto;margin-left:6px">キャンセル解除</button>`:""}
+        ${renderReservationActionButtons(r)}
+        ${r.cancelled?`<button type="button" class="btn btn-sm btn-outline reservation-uncancel-btn" data-res-id="${r.id}" style="margin-top:6px;width:auto">キャンセル解除</button>`:""}
         本指名: ${hon}本<br>
         コース（${r.duration}分）${r.cancelled?"—":fmt(e.course)}${!r.cancelled&&e.ext > 0 ? " + 延長（" + e.extMin + "分）" + fmt(e.ext) : ""}
       </div>
@@ -2580,6 +2683,16 @@ function initReservationListEvents(){
   if(!el||el.dataset.resEditReady)return;
   el.dataset.resEditReady="1";
   el.addEventListener("click",e=>{
+    const nameBtn=e.target.closest(".reservation-name-btn");
+    if(nameBtn){
+      openReservationNameEditModal(parseInt(nameBtn.dataset.resId,10));
+      return;
+    }
+    const memoBtn=e.target.closest(".reservation-memo-btn");
+    if(memoBtn){
+      openReservationMemoModal(parseInt(memoBtn.dataset.resId,10));
+      return;
+    }
     const editBtn=e.target.closest(".reservation-edit-btn");
     if(editBtn){
       openReservationEditModal(parseInt(editBtn.dataset.resId,10));
@@ -2685,6 +2798,35 @@ document.getElementById("reservation-edit-modal").addEventListener("click",e=>{
 document.getElementById("reservation-delete-modal").addEventListener("click",e=>{
   if(e.target.id==="reservation-delete-modal"){
     pendingDeleteReservationId=null;
+    e.target.classList.remove("show");
+  }
+});
+document.getElementById("btn-save-name-edit").addEventListener("click",saveReservationNameEdit);
+document.getElementById("btn-name-edit-new-customer").addEventListener("click",()=>{
+  nameEditNewCustomerMode=true;
+  nameEditSelectedCustomerId=null;
+  const search=document.getElementById("name-edit-search").value.trim();
+  document.getElementById("name-edit-new-panel").style.display="block";
+  if(search){
+    document.getElementById("name-edit-new-display").value=search;
+    if(!document.getElementById("name-edit-new-shop").value.trim()){
+      document.getElementById("name-edit-new-shop").value=search;
+    }
+  }
+});
+document.getElementById("name-edit-search").addEventListener("input",e=>{
+  nameEditSelectedCustomerId=null;
+  nameEditNewCustomerMode=false;
+  document.getElementById("name-edit-new-panel").style.display="none";
+  renderNameEditModalResults(e.target.value);
+});
+document.getElementById("reservation-name-edit-modal").addEventListener("click",e=>{
+  if(e.target.id==="reservation-name-edit-modal")closeReservationNameEditModal();
+});
+document.getElementById("btn-save-res-memo").addEventListener("click",saveReservationMemoEdit);
+document.getElementById("reservation-memo-modal").addEventListener("click",e=>{
+  if(e.target.id==="reservation-memo-modal"){
+    editingMemoReservationId=null;
     e.target.classList.remove("show");
   }
 });
