@@ -572,6 +572,8 @@ const SAMPLE_TEXT = `本日の予約です！
 ※動画 即尺 アナル舐め`;
 
 const STORAGE_KEY = "lumiData";
+const TAB_STORAGE_KEY = "lumiActiveTab";
+const VALID_TABS = ["home","schedule","customers","settings"];
 
 let reservationIdSeq = 1;
 let customerIdSeq = 1;
@@ -683,9 +685,16 @@ function fmtClockDisplay(clockStr){
   if(!m)return clockStr;
   const h=parseInt(m[1],10),mn=parseInt(m[2],10);
   const pad=String(mn).padStart(2,"0");
-  if(h===24&&mn===0)return"24:00";
-  if(h>24||(h===24&&mn>0))return"翌"+(h-24)+":"+pad;
+  if(h===24)return"24:"+pad;
+  if(h>24)return"翌"+(h-24)+":"+pad;
   return h+":"+pad;
+}
+
+function fmtReservationTimeDisplay(timeStr){
+  const m=String(timeStr||"").match(/(\d{1,2})時(\d{1,2})分/);
+  if(!m)return timeStr;
+  const h=parseInt(m[1],10),mn=parseInt(m[2],10);
+  return fmtClockDisplay(h+":"+String(mn).padStart(2,"0"));
 }
 
 function fmtBusinessTime(minutes){
@@ -928,9 +937,30 @@ function createCustomer(shopName,displayName){
   return customer;
 }
 
+function getReservationCustomer(r){
+  if(r.customerId)return findCustomerById(r.customerId);
+  if(!r.customerName)return null;
+  const matches=findCustomersByShopName(r.customerName);
+  return matches.length===1?matches[0]:null;
+}
+
+function formatCustomerNameBlock(c,fallbackShopName){
+  if(!c&&!fallbackShopName)return"";
+  const display=c?getCustomerDisplayName(c):fallbackShopName;
+  const shop=c?c.shopName:fallbackShopName;
+  return`<strong>${display}様</strong><br><span style="font-size:12px;color:var(--text-muted)">店登録名: ${shop}</span>`;
+}
+
+function formatCustomerNameInline(c,fallbackShopName){
+  if(!c&&!fallbackShopName)return"";
+  const display=c?getCustomerDisplayName(c):fallbackShopName;
+  const shop=c?c.shopName:fallbackShopName;
+  return`${display}様 <span style="font-size:11px;color:var(--text-muted)">（店登録: ${shop}）</span>`;
+}
+
 function getReservationCustomerLabel(r){
   if(!r.customerName&&!r.customerId)return"";
-  const c=r.customerId?findCustomerById(r.customerId):findCustomersByShopName(r.customerName)[0];
+  const c=getReservationCustomer(r);
   return getCustomerDisplayName(c)||r.customerName||"";
 }
 
@@ -1009,26 +1039,22 @@ function renderManualCustomerSearch(){
     newWrap.style.display="none";
     return;
   }
-  if(results.length){
-    resultsEl.innerHTML=results.map(c=>`
+  resultsEl.innerHTML=results.map(c=>`
       <button type="button" class="customer-search-item${manualSelectedCustomerId===c.id?" selected":""}" data-id="${c.id}">
         <div class="customer-search-item-name">${getCustomerDisplayName(c)}（本指名${c.count||0}回）</div>
-        <div class="customer-search-item-sub">店登録名: ${c.shopName}${c.displayName!==c.shopName?" · 表示名: "+c.displayName:""}</div>
+        <div class="customer-search-item-sub">店登録名: ${c.shopName}</div>
       </button>`).join("");
-    newWrap.style.display="none";
-    resultsEl.querySelectorAll(".customer-search-item").forEach(btn=>{
-      btn.addEventListener("click",()=>{
-        manualSelectedCustomerId=parseInt(btn.dataset.id,10);
-        renderManualCustomerSearch();
-      });
+  resultsEl.querySelectorAll(".customer-search-item[data-id]").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      manualSelectedCustomerId=parseInt(btn.dataset.id,10);
+      renderManualCustomerSearch();
     });
-  }else{
-    resultsEl.innerHTML="";
-    newWrap.style.display="block";
-    document.getElementById("manual-new-customer-panel").style.display="none";
-    document.getElementById("manual-new-shop-name").value=query;
-    document.getElementById("manual-new-display-name").value=query;
-  }
+  });
+  newWrap.style.display="block";
+  document.getElementById("btn-show-new-customer").textContent=`新しい「${query}」として登録`;
+  document.getElementById("manual-new-customer-panel").style.display="none";
+  document.getElementById("manual-new-shop-name").value=query;
+  document.getElementById("manual-new-display-name").value=query;
 }
 
 function clockToTimeStr(clock){
@@ -1320,11 +1346,13 @@ function renderHome(){
   listEl.innerHTML=state.reservations.map(r=>{
     const e=calcReservationEarnings(r);
     const durDisplay=r.durationLabel+(r.extensionMin>0?" (+延長"+r.extensionMin+"分)":"");
+    const c=getReservationCustomer(r);
+    const customerSub=formatCustomerNameInline(c,r.customerName);
     return`<div class="schedule-item">
-      <div class="schedule-time">${r.timeStr.replace("時",":").replace("分","")}</div>
+      <div class="schedule-time">${fmtReservationTimeDisplay(r.timeStr)}</div>
       <div class="schedule-info">
         <strong>${r.type}</strong> ${durDisplay} ${r.location}
-        <div class="sub">${getReservationCustomerLabel(r)?getReservationCustomerLabel(r)+"様 · ":""}${fmt(e.total)}</div>
+        <div class="sub">${customerSub?customerSub+" · ":""}${fmt(e.total)}</div>
       </div>
     </div>`;
   }).join("");
@@ -1352,14 +1380,15 @@ function renderReservations(){
     const extNote=r.extensionMin>0?` <span style="color:var(--pink)">(+延長${r.extensionMin}分)</span>`:"";
     const tab=reservationTabs[r.id]||"extend";
     const tipSavedHtml=(r.tip||0)>0?`<div class="tip-saved">チップ +${(r.tip||0).toLocaleString("ja-JP")}円</div>`:"";
+    const customerHtml=formatCustomerNameBlock(getReservationCustomer(r),r.customerName);
     return`<div class="reservation-card" data-id="${r.id}">
       <div class="reservation-header">
-        <div class="reservation-time">${r.timeStr}</div>
+        <div class="reservation-time">${fmtReservationTimeDisplay(r.timeStr)}</div>
         <span class="reservation-type ${typeClass(r.type)}">${r.type}</span>
       </div>
       <div class="reservation-detail">
         <strong>${r.durationLabel}</strong>${extNote} · ${r.location}<br>
-        ${getReservationCustomerLabel(r)?`<strong>${getReservationCustomerLabel(r)}様</strong><br>`:""}
+        ${customerHtml?customerHtml+"<br>":""}
         本指名: ${hon}本<br>
         コース（${r.duration}分）${fmt(e.course)}${e.ext > 0 ? " + 延長（" + e.extMin + "分）" + fmt(e.ext) : ""}
       </div>
@@ -1599,12 +1628,29 @@ function loadSchedule(registerCustomers){
   renderAll();
 }
 
+function switchTab(screenId){
+  if(!VALID_TABS.includes(screenId))screenId="home";
+  document.querySelectorAll(".tab-item").forEach(t=>{
+    t.classList.toggle("active",t.dataset.screen===screenId);
+  });
+  document.querySelectorAll(".screen").forEach(s=>{
+    s.classList.toggle("active",s.id==="screen-"+screenId);
+  });
+  try{localStorage.setItem(TAB_STORAGE_KEY,screenId);}catch(e){}
+}
+
+function restoreActiveTab(){
+  let screenId="home";
+  try{
+    const saved=localStorage.getItem(TAB_STORAGE_KEY);
+    if(saved&&VALID_TABS.includes(saved))screenId=saved;
+  }catch(e){}
+  switchTab(screenId);
+}
+
 document.querySelectorAll(".tab-item").forEach(tab=>{
   tab.addEventListener("click",()=>{
-    document.querySelectorAll(".tab-item").forEach(t=>t.classList.remove("active"));
-    document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
-    tab.classList.add("active");
-    document.getElementById("screen-"+tab.dataset.screen).classList.add("active");
+    switchTab(tab.dataset.screen);
   });
 });
 
@@ -1654,6 +1700,7 @@ if(!loaded&&!scheduleInput.value.trim()){
 }else if(scheduleInput.value.trim()&&!state.reservations.length){
   loadSchedule(false);
 }
+restoreActiveTab();
 renderAll();
 })();
 </script>
