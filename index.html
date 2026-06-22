@@ -509,6 +509,30 @@ input[type="number"]{padding-left:28px}
       <label class="form-label">店登録名</label>
       <input type="text" id="edit-customer-shop">
     </div>
+    <div class="form-group">
+      <label class="form-label">前回会った日</label>
+      <input type="text" id="edit-customer-last-visit" placeholder="例: 2026/06/21">
+    </div>
+    <div class="form-group">
+      <label class="form-label">本指名回数</label>
+      <input type="number" id="edit-customer-hon-count" min="0" step="1">
+    </div>
+    <div class="form-group">
+      <label class="form-label">総チップ額（円）</label>
+      <input type="number" id="edit-customer-total-tips" min="0" step="1000">
+    </div>
+    <div class="form-group">
+      <label class="form-label">最長コース（分）</label>
+      <input type="number" id="edit-customer-max-course" min="0" step="1" placeholder="例: 240">
+    </div>
+    <div class="form-group">
+      <label class="form-label">前回コース</label>
+      <input type="text" id="edit-customer-last-course" placeholder="例: 90分＋延長90分">
+    </div>
+    <div class="form-group">
+      <label class="form-label">自由メモ</label>
+      <textarea id="edit-customer-memo" rows="5" placeholder="例:&#10;・黒メガネ&#10;・不動産&#10;・キス好き"></textarea>
+    </div>
     <button class="btn btn-gold" id="btn-save-customer-edit">保存</button>
     <button class="btn btn-outline" id="btn-delete-customer-edit" style="width:100%;margin-top:10px">削除</button>
   </div>
@@ -580,6 +604,10 @@ let customerIdSeq = 1;
 const reservationTabs = {};
 let manualSelectedCustomerId = null;
 let editingCustomerId = null;
+let editingNameReservationId = null;
+let nameEditSelectedCustomerId = null;
+const nameEditQuery = {};
+const nameEditNewMode = {};
 
 const state = {
   rank: "S2",
@@ -661,7 +689,7 @@ function loadState(){
       if(Array.isArray(data.reservations)){
         state.reservations=data.reservations;
         for(const r of state.reservations){
-          if(r.honCounted==null)r.honCounted=r.type==="本指名"&&!!r.customerName;
+          migrateReservation(r);
         }
         reservationIdSeq=state.reservations.reduce((max,r)=>Math.max(max,r.id||0),0)+1;
       }
@@ -875,25 +903,64 @@ function parseTimeStr(str){
 }
 
 function migrateCustomer(c){
-  if(c.shopName){
-    return{
-      id:c.id||0,
-      shopName:c.shopName,
-      displayName:c.displayName||c.shopName,
-      count:c.count||0,
-      lastVisit:c.lastVisit||"",
-      totalTips:c.totalTips||0
-    };
-  }
-  const shopName=c.name||"";
+  const shopName=c.shopName||c.name||"";
   return{
     id:c.id||0,
     shopName,
     displayName:c.displayName||shopName,
-    count:c.count||0,
-    lastVisit:c.lastVisit||"",
-    totalTips:c.totalTips||0
+    honCount:c.honCount??c.count??0,
+    lastVisitDate:c.lastVisitDate||c.lastVisit||"",
+    totalTips:c.totalTips||0,
+    maxCourse:c.maxCourse||0,
+    lastCourse:c.lastCourse||"",
+    memo:c.memo||""
   };
+}
+
+function getCustomerHonCount(c){
+  if(!c)return 0;
+  return c.honCount??c.count??0;
+}
+
+function getCustomerLastVisit(c){
+  if(!c)return"";
+  return c.lastVisitDate||c.lastVisit||"";
+}
+
+function formatTodayDate(){
+  const d=new Date();
+  return d.getFullYear()+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+String(d.getDate()).padStart(2,"0");
+}
+
+function getReservationCourseMinutes(r){
+  return(r.duration||0)+(r.extensionMin||0);
+}
+
+function formatCourseDisplay(r){
+  const dur=r.duration||0;
+  const ext=r.extensionMin||0;
+  if(ext>0)return dur+"分＋延長"+ext+"分";
+  return dur+"分";
+}
+
+function formatMaxCourseDisplay(minutes){
+  if(!minutes)return"—";
+  return minutes+"分";
+}
+
+function formatMemoPreview(memo){
+  if(!memo)return"";
+  const lines=memo.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  return lines.slice(0,2).map(l=>l.replace(/^[・\-]\s*/,"")).join(" / ");
+}
+
+function updateCustomerStatsFromReservation(customer,r){
+  customer.honCount=getCustomerHonCount(customer)+1;
+  customer.lastVisitDate=formatTodayDate();
+  customer.totalTips=(customer.totalTips||0)+(r.tip||0);
+  customer.lastCourse=formatCourseDisplay(r);
+  const courseMin=getReservationCourseMinutes(r);
+  if(courseMin>(customer.maxCourse||0))customer.maxCourse=courseMin;
 }
 
 function getCustomerDisplayName(c){
@@ -919,7 +986,7 @@ function searchCustomers(query){
   if(key){
     list=list.filter(c=>toSearchKey(c.shopName).includes(key)||toSearchKey(c.displayName).includes(key));
   }
-  list.sort((a,b)=>(b.count||0)-(a.count||0));
+  list.sort((a,b)=>getCustomerHonCount(b)-getCustomerHonCount(a));
   return list;
 }
 
@@ -928,20 +995,180 @@ function createCustomer(shopName,displayName){
     id:customerIdSeq++,
     shopName:shopName.trim(),
     displayName:(displayName||shopName).trim()||shopName.trim(),
-    count:0,
-    lastVisit:"",
-    totalTips:0
+    honCount:0,
+    lastVisitDate:"",
+    totalTips:0,
+    maxCourse:0,
+    lastCourse:"",
+    memo:""
   };
   state.customers.push(customer);
   saveState();
   return customer;
 }
 
+function migrateReservation(r){
+  if(r.guestDisplayName==null)r.guestDisplayName="";
+  if(r.customerLinked==null)r.customerLinked=!!(r.honCounted||r.customerId);
+  if(r.linkedCustomerId==null)r.linkedCustomerId=r.customerId||null;
+  if(r.customerLinked&&!r.linkedCustomerId)r.customerLinked=false;
+}
+
+function escAttr(s){
+  return String(s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+}
+
 function getReservationCustomer(r){
-  if(r.customerId)return findCustomerById(r.customerId);
-  if(!r.customerName)return null;
-  const matches=findCustomersByShopName(r.customerName);
-  return matches.length===1?matches[0]:null;
+  if(r.customerLinked&&r.linkedCustomerId)return findCustomerById(r.linkedCustomerId);
+  return null;
+}
+
+function renderReservationNameHtml(r){
+  if(r.type==="本指名"){
+    if(r.customerLinked&&r.linkedCustomerId){
+      const c=getReservationCustomer(r);
+      const display=r.guestDisplayName||getCustomerDisplayName(c);
+      const shop=c?c.shopName:r.customerName;
+      return`<strong>${display}様</strong><br><span style="font-size:12px;color:var(--text-muted)">店登録名: ${shop}</span>`;
+    }
+    const provisional=r.customerName||r.guestDisplayName;
+    if(provisional){
+      return`<span style="color:var(--text-muted)">仮名：${provisional}様</span><br><span style="font-size:12px;color:var(--pink)">未確定</span>`;
+    }
+    return`<span style="font-size:12px;color:var(--text-muted)">名前未入力</span>`;
+  }
+  const name=r.guestDisplayName||r.customerName;
+  if(name)return`<strong>${name}様</strong>`;
+  return"";
+}
+
+function renderReservationNameInline(r){
+  if(r.type==="本指名"){
+    if(r.customerLinked&&r.linkedCustomerId){
+      const c=getReservationCustomer(r);
+      return formatCustomerNameInline(c,r.customerName);
+    }
+    const provisional=r.customerName||r.guestDisplayName;
+    if(provisional)return`仮名：${provisional}様 <span style="font-size:11px;color:var(--pink)">（未確定）</span>`;
+    return"";
+  }
+  const name=r.guestDisplayName||r.customerName;
+  return name?name+"様":"";
+}
+
+function buildNameEditResultsHtml(r,query){
+  const results=searchCustomers(query);
+  const selected=nameEditSelectedCustomerId;
+  let html=results.map(c=>`
+    <button type="button" class="customer-search-item name-pick-item${selected===c.id?" selected":""}" data-res-id="${r.id}" data-cid="${c.id}">
+      <div class="customer-search-item-name">${getCustomerDisplayName(c)}（本指名${getCustomerHonCount(c)}回）</div>
+      <div class="customer-search-item-sub">店登録名: ${c.shopName}</div>
+    </button>`).join("");
+  if(query){
+    html+=`<button type="button" class="btn btn-sm btn-outline name-edit-new-btn" data-res-id="${r.id}" style="width:100%;margin-top:8px">新しい「${escAttr(query)}」として登録</button>`;
+  }
+  return html;
+}
+
+function buildNameEditPanel(r){
+  if(editingNameReservationId!==r.id)return"";
+  const query=nameEditQuery[r.id]!==undefined?nameEditQuery[r.id]:(r.guestDisplayName||r.customerName||"");
+  if(r.type==="本指名"&&!r.customerLinked){
+    const shopDefault=r.customerName||query;
+    const newOpen=!!nameEditNewMode[r.id];
+    return`<div class="name-edit-panel tip-panel" style="margin-top:10px">
+      <div class="tip-panel-label">表示名</div>
+      <input type="text" class="name-edit-input" data-res-id="${r.id}" value="${escAttr(query)}" placeholder="例: マキノ黒メガネ">
+      <div class="name-edit-results customer-search-results" data-res-id="${r.id}">${buildNameEditResultsHtml(r,query)}</div>
+      <div class="name-edit-new-panel" data-res-id="${r.id}" style="display:${newOpen?"block":"none"};margin-top:10px">
+        <div class="form-group" style="margin-bottom:10px">
+          <label class="form-label">店登録名</label>
+          <input type="text" class="name-edit-shop" data-res-id="${r.id}" value="${escAttr(shopDefault)}" placeholder="例: マキノ">
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label class="form-label">表示名</label>
+          <input type="text" class="name-edit-display" data-res-id="${r.id}" value="${escAttr(query)}" placeholder="例: マキノ黒メガネ">
+        </div>
+      </div>
+      <button type="button" class="btn btn-sm btn-primary name-edit-save-btn" data-res-id="${r.id}" style="margin-top:8px;width:100%">保存</button>
+    </div>`;
+  }
+  const val=r.guestDisplayName||r.customerName||"";
+  return`<div class="name-edit-panel tip-panel" style="margin-top:10px">
+    <div class="tip-panel-label">名前</div>
+    <input type="text" class="name-edit-input" data-res-id="${r.id}" value="${escAttr(val)}" placeholder="名前を入力">
+    <button type="button" class="btn btn-sm btn-primary name-edit-save-btn" data-res-id="${r.id}" style="margin-top:8px;width:100%">保存</button>
+  </div>`;
+}
+
+function linkReservationToCustomer(r,customerId,displayName,shopName){
+  let customer;
+  if(customerId){
+    customer=findCustomerById(customerId);
+    if(!customer)return false;
+  }else{
+    if(!shopName)return false;
+    customer=createCustomer(shopName,displayName||shopName);
+  }
+  if(!r.customerLinked){
+    updateCustomerStatsFromReservation(customer,r);
+  }
+  r.customerLinked=true;
+  r.linkedCustomerId=customer.id;
+  r.guestDisplayName=displayName||customer.displayName;
+  r.customerName=shopName||customer.shopName;
+  saveState();
+  return true;
+}
+
+function saveReservationGuestName(r,name){
+  r.guestDisplayName=(name||"").trim();
+  saveState();
+}
+
+function saveReservationNameConfirm(resId){
+  const r=state.reservations.find(x=>x.id===resId);
+  if(!r)return;
+  const query=(nameEditQuery[resId]!==undefined?nameEditQuery[resId]:(r.guestDisplayName||r.customerName||"")).trim();
+  if(r.type!=="本指名"){
+    saveReservationGuestName(r,query);
+    editingNameReservationId=null;
+    nameEditSelectedCustomerId=null;
+    renderAll();
+    return;
+  }
+  if(r.customerLinked){
+    saveReservationGuestName(r,query);
+    editingNameReservationId=null;
+    renderAll();
+    return;
+  }
+  if(nameEditSelectedCustomerId){
+    const c=findCustomerById(nameEditSelectedCustomerId);
+    if(c){
+      linkReservationToCustomer(r,c.id,query||c.displayName,c.shopName);
+      editingNameReservationId=null;
+      nameEditSelectedCustomerId=null;
+      renderAll();
+      return;
+    }
+  }
+  if(nameEditNewMode[resId]){
+    const shopEl=document.querySelector(`.name-edit-shop[data-res-id="${resId}"]`);
+    const dispEl=document.querySelector(`.name-edit-display[data-res-id="${resId}"]`);
+    const shop=shopEl?shopEl.value.trim():"";
+    const display=dispEl?dispEl.value.trim():query;
+    if(!shop)return;
+    linkReservationToCustomer(r,null,display||shop,shop);
+    editingNameReservationId=null;
+    nameEditSelectedCustomerId=null;
+    nameEditNewMode[resId]=false;
+    renderAll();
+    return;
+  }
+  if(!query&&!nameEditNewMode[resId])return;
+  editingNameReservationId=null;
+  renderAll();
 }
 
 function formatCustomerNameBlock(c,fallbackShopName){
@@ -959,40 +1186,17 @@ function formatCustomerNameInline(c,fallbackShopName){
 }
 
 function getReservationCustomerLabel(r){
-  if(!r.customerName&&!r.customerId)return"";
+  if(!r.customerName&&!r.guestDisplayName&&!r.customerLinked)return"";
   const c=getReservationCustomer(r);
-  return getCustomerDisplayName(c)||r.customerName||"";
-}
-
-function recordHonShimeiVisit(customerId,shopName,onResolved){
-  const today=new Date().toLocaleDateString("ja-JP");
-  if(customerId){
-    const c=findCustomerById(customerId);
-    if(c){c.count=(c.count||0)+1;c.lastVisit=today;saveState();return c}
-  }
-  if(!shopName)return null;
-  const matches=findCustomersByShopName(shopName);
-  if(matches.length===1){
-    matches[0].count=(matches[0].count||0)+1;
-    matches[0].lastVisit=today;
-    saveState();
-    return matches[0];
-  }
-  if(matches.length>1){
-    showCustomerModal(shopName,matches,onResolved);
-    return null;
-  }
-  const c=createCustomer(shopName,shopName);
-  c.count=1;
-  c.lastVisit=today;
-  saveState();
-  return c;
+  if(c)return getCustomerDisplayName(c);
+  return r.guestDisplayName||r.customerName||"";
 }
 
 function applyReservationTipToCustomer(r,oldTip,newTip){
   const delta=(newTip||0)-(oldTip||0);
   if(!delta)return;
-  let c=r.customerId?findCustomerById(r.customerId):findCustomersByShopName(r.customerName)[0];
+  if(!r.customerLinked||!r.linkedCustomerId)return;
+  const c=findCustomerById(r.linkedCustomerId);
   if(!c)return;
   c.totalTips=(c.totalTips||0)+delta;
   saveState();
@@ -1041,7 +1245,7 @@ function renderManualCustomerSearch(){
   }
   resultsEl.innerHTML=results.map(c=>`
       <button type="button" class="customer-search-item${manualSelectedCustomerId===c.id?" selected":""}" data-id="${c.id}">
-        <div class="customer-search-item-name">${getCustomerDisplayName(c)}（本指名${c.count||0}回）</div>
+        <div class="customer-search-item-name">${getCustomerDisplayName(c)}（本指名${getCustomerHonCount(c)}回）</div>
         <div class="customer-search-item-sub">店登録名: ${c.shopName}</div>
       </button>`).join("");
   resultsEl.querySelectorAll(".customer-search-item[data-id]").forEach(btn=>{
@@ -1086,11 +1290,12 @@ function createManualReservation(timeClock,type,duration,location,shopName,opKey
     durationLabel:duration+"分",
     location,
     customerName:shopName||"",
-    customerId:customerId||null,
+    guestDisplayName:"",
+    customerLinked:false,
+    linkedCustomerId:null,
     ops,
     extensionMin:0,
     tip:0,
-    honCounted:false,
     rawText:blockText
   };
 }
@@ -1142,12 +1347,13 @@ function addManualReservation(){
   const opKeys=getSelectedManualOps();
   let shopName="";
   let customerId=null;
+  let linkedCustomer=null;
   if(type==="本指名"){
     if(!manualSelectedCustomerId)return;
-    const c=findCustomerById(manualSelectedCustomerId);
-    if(!c)return;
-    shopName=c.shopName;
-    customerId=c.id;
+    linkedCustomer=findCustomerById(manualSelectedCustomerId);
+    if(!linkedCustomer)return;
+    shopName=linkedCustomer.shopName;
+    customerId=linkedCustomer.id;
   }
   const blockText=buildManualReservationText(timeClock,type,duration,location,shopName,opKeys);
   const reservation=createManualReservation(timeClock,type,duration,location,shopName,opKeys,customerId);
@@ -1155,9 +1361,9 @@ function addManualReservation(){
   sortReservations();
   const ta=document.getElementById("schedule-input");
   ta.value=(ta.value.trim()?ta.value.trim()+"\n\n":"")+blockText;
-  if(type==="本指名"&&customerId){
-    recordHonShimeiVisit(customerId,shopName);
-    reservation.honCounted=true;
+  if(type==="本指名"&&linkedCustomer){
+    reservation.guestDisplayName=linkedCustomer.displayName;
+    linkReservationToCustomer(reservation,linkedCustomer.id,linkedCustomer.displayName,linkedCustomer.shopName);
   }
   manualSelectedCustomerId=null;
   const searchInput=document.getElementById("manual-customer-search");
@@ -1169,14 +1375,6 @@ function addManualReservation(){
 
 function reservationHonKey(r){
   return[r.timeStr,r.type,r.customerName||"",r.duration,r.location].join("|");
-}
-
-function linkReservationCustomers(){
-  for(const r of state.reservations){
-    if(r.type!=="本指名"||!r.customerName||r.customerId)continue;
-    const matches=findCustomersByShopName(r.customerName);
-    if(matches.length===1)r.customerId=matches[0].id;
-  }
 }
 
 function parseReservations(text){
@@ -1216,11 +1414,12 @@ function parseReservations(text){
       durationLabel:durInfo.durationLabel,
       location,
       customerName,
-      customerId:null,
+      guestDisplayName:"",
+      customerLinked:false,
+      linkedCustomerId:null,
       ops,
       extensionMin:0,
       tip:0,
-      honCounted:false,
       rawText:fullText.trim()
     });
   }
@@ -1346,8 +1545,7 @@ function renderHome(){
   listEl.innerHTML=state.reservations.map(r=>{
     const e=calcReservationEarnings(r);
     const durDisplay=r.durationLabel+(r.extensionMin>0?" (+延長"+r.extensionMin+"分)":"");
-    const c=getReservationCustomer(r);
-    const customerSub=formatCustomerNameInline(c,r.customerName);
+    const customerSub=renderReservationNameInline(r);
     return`<div class="schedule-item">
       <div class="schedule-time">${fmtReservationTimeDisplay(r.timeStr)}</div>
       <div class="schedule-info">
@@ -1380,7 +1578,8 @@ function renderReservations(){
     const extNote=r.extensionMin>0?` <span style="color:var(--pink)">(+延長${r.extensionMin}分)</span>`:"";
     const tab=reservationTabs[r.id]||"extend";
     const tipSavedHtml=(r.tip||0)>0?`<div class="tip-saved">チップ +${(r.tip||0).toLocaleString("ja-JP")}円</div>`:"";
-    const customerHtml=formatCustomerNameBlock(getReservationCustomer(r),r.customerName);
+    const customerHtml=renderReservationNameHtml(r);
+    const nameEditPanel=buildNameEditPanel(r);
     return`<div class="reservation-card" data-id="${r.id}">
       <div class="reservation-header">
         <div class="reservation-time">${fmtReservationTimeDisplay(r.timeStr)}</div>
@@ -1389,6 +1588,8 @@ function renderReservations(){
       <div class="reservation-detail">
         <strong>${r.durationLabel}</strong>${extNote} · ${r.location}<br>
         ${customerHtml?customerHtml+"<br>":""}
+        <button type="button" class="btn btn-sm btn-outline name-edit-btn" data-res-id="${r.id}" style="margin-top:6px;width:auto">名前を編集</button>
+        ${nameEditPanel}
         本指名: ${hon}本<br>
         コース（${r.duration}分）${fmt(e.course)}${e.ext > 0 ? " + 延長（" + e.extMin + "分）" + fmt(e.ext) : ""}
       </div>
@@ -1459,19 +1660,26 @@ function renderCustomers(){
     el.innerHTML=`<div class="empty-state"><p>「${query}」に一致する顧客がいません</p></div>`;
     return;
   }
-  el.innerHTML=list.map(c=>`
+  el.innerHTML=list.map(c=>{
+    const memoPreview=formatMemoPreview(c.memo);
+    return`
     <div class="customer-card" data-id="${c.id}">
-      <div class="customer-name">${getCustomerDisplayName(c)} <span class="rank-badge">本指名${c.count||0}回</span></div>
-      <div class="customer-meta">
-        <span>店登録名: ${c.shopName}</span>
-        <span>最終: ${c.lastVisit||"—"}</span>
-        <span>チップ: ${fmt(c.totalTips||0)}</span>
+      <div class="customer-name">${getCustomerDisplayName(c)}</div>
+      <div class="customer-meta" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <span>店登録名：${c.shopName}</span>
+        <span>本指名：${getCustomerHonCount(c)}回</span>
+        <span>前回：${getCustomerLastVisit(c)||"—"}</span>
+        <span>前回コース：${c.lastCourse||"—"}</span>
+        <span>最長コース：${formatMaxCourseDisplay(c.maxCourse)}</span>
+        <span>総チップ：${fmt(c.totalTips||0)}</span>
+        ${memoPreview?`<span>メモ：${memoPreview}</span>`:""}
       </div>
       <div class="customer-card-actions">
         <button type="button" class="btn btn-sm btn-outline btn-edit-customer" data-id="${c.id}">編集</button>
         <button type="button" class="btn btn-sm btn-outline btn-delete-customer" data-id="${c.id}">削除</button>
       </div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   el.querySelectorAll(".btn-edit-customer").forEach(btn=>{
     btn.addEventListener("click",()=>openCustomerEditModal(parseInt(btn.dataset.id,10)));
   });
@@ -1486,6 +1694,12 @@ function openCustomerEditModal(id){
   editingCustomerId=id;
   document.getElementById("edit-customer-display").value=c.displayName||"";
   document.getElementById("edit-customer-shop").value=c.shopName||"";
+  document.getElementById("edit-customer-last-visit").value=getCustomerLastVisit(c);
+  document.getElementById("edit-customer-hon-count").value=getCustomerHonCount(c);
+  document.getElementById("edit-customer-total-tips").value=c.totalTips||0;
+  document.getElementById("edit-customer-max-course").value=c.maxCourse||0;
+  document.getElementById("edit-customer-last-course").value=c.lastCourse||"";
+  document.getElementById("edit-customer-memo").value=c.memo||"";
   document.getElementById("customer-edit-modal").classList.add("show");
 }
 
@@ -1497,6 +1711,12 @@ function saveCustomerEdit(){
   if(!shop)return;
   c.shopName=shop;
   c.displayName=display||shop;
+  c.lastVisitDate=document.getElementById("edit-customer-last-visit").value.trim();
+  c.honCount=parseInt(document.getElementById("edit-customer-hon-count").value,10)||0;
+  c.totalTips=parseInt(document.getElementById("edit-customer-total-tips").value,10)||0;
+  c.maxCourse=parseInt(document.getElementById("edit-customer-max-course").value,10)||0;
+  c.lastCourse=document.getElementById("edit-customer-last-course").value.trim();
+  c.memo=document.getElementById("edit-customer-memo").value;
   editingCustomerId=null;
   document.getElementById("customer-edit-modal").classList.remove("show");
   saveState();
@@ -1556,15 +1776,15 @@ function showCustomerModal(shopName,matches,onResolved){
   const actions=document.getElementById("modal-actions");
   actions.innerHTML=matches.map((c,i)=>`
     <button class="customer-pick" data-idx="${i}">
-      <div class="customer-pick-name">${getCustomerDisplayName(c)}（本指名${c.count||0}回）</div>
-      <div class="customer-pick-meta">店登録名: ${c.shopName} · 最終: ${c.lastVisit||"—"}</div>
+      <div class="customer-pick-name">${getCustomerDisplayName(c)}（本指名${getCustomerHonCount(c)}回）</div>
+      <div class="customer-pick-meta">店登録名: ${c.shopName} · 前回: ${getCustomerLastVisit(c)||"—"}</div>
     </button>`).join("")+
     `<button class="btn btn-gold" id="modal-new">新規登録として追加</button>`;
   actions.querySelectorAll(".customer-pick").forEach(btn=>{
     btn.addEventListener("click",()=>{
       const c=matches[parseInt(btn.dataset.idx,10)];
-      c.count=(c.count||0)+1;
-      c.lastVisit=new Date().toLocaleDateString("ja-JP");
+      c.honCount=getCustomerHonCount(c)+1;
+      c.lastVisitDate=formatTodayDate();
       modal.classList.remove("show");
       saveState();
       renderAll();
@@ -1573,8 +1793,8 @@ function showCustomerModal(shopName,matches,onResolved){
   });
   document.getElementById("modal-new").addEventListener("click",()=>{
     const c=createCustomer(shopName,shopName);
-    c.count=1;
-    c.lastVisit=new Date().toLocaleDateString("ja-JP");
+    c.honCount=1;
+    c.lastVisitDate=formatTodayDate();
     modal.classList.remove("show");
     saveState();
     renderAll();
@@ -1583,49 +1803,88 @@ function showCustomerModal(shopName,matches,onResolved){
   modal.classList.add("show");
 }
 
-function processCustomersFromReservations(){
-  for(const r of state.reservations){
-    if(r.type!=="本指名"||!r.customerName||r.honCounted)continue;
-    const c=recordHonShimeiVisit(r.customerId||null,r.customerName,picked=>{
-      if(!picked)return;
-      if(!r.customerId)r.customerId=picked.id;
-      r.honCounted=true;
-      saveState();
-      renderCustomers();
-    });
-    if(c){
-      if(!r.customerId)r.customerId=c.id;
-      r.honCounted=true;
-    }
-  }
-}
-
-function loadSchedule(registerCustomers){
+function loadSchedule(){
   const text=document.getElementById("schedule-input").value.trim();
   if(!text)return;
-  const oldHon=new Map();
-  const oldTips=new Map();
-  const oldExt=new Map();
-  const oldCustomerIds=new Map();
+  const oldMeta=new Map();
   for(const r of state.reservations){
     const k=reservationHonKey(r);
-    if(r.honCounted)oldHon.set(k,true);
-    if(r.tip)oldTips.set(k,r.tip);
-    if(r.extensionMin)oldExt.set(k,r.extensionMin);
-    if(r.customerId)oldCustomerIds.set(k,r.customerId);
+    oldMeta.set(k,{
+      tip:r.tip,
+      extensionMin:r.extensionMin,
+      guestDisplayName:r.guestDisplayName,
+      customerLinked:r.customerLinked,
+      linkedCustomerId:r.linkedCustomerId
+    });
   }
   state.reservations=parseReservations(text);
   for(const r of state.reservations){
     const k=reservationHonKey(r);
-    if(oldTips.has(k))r.tip=oldTips.get(k);
-    if(oldExt.has(k))r.extensionMin=oldExt.get(k);
-    if(oldCustomerIds.has(k))r.customerId=oldCustomerIds.get(k);
-    if(oldHon.has(k))r.honCounted=true;
+    const old=oldMeta.get(k);
+    if(!old)continue;
+    if(old.tip)r.tip=old.tip;
+    if(old.extensionMin)r.extensionMin=old.extensionMin;
+    if(old.guestDisplayName)r.guestDisplayName=old.guestDisplayName;
+    if(old.customerLinked){
+      r.customerLinked=old.customerLinked;
+      r.linkedCustomerId=old.linkedCustomerId;
+    }
+    migrateReservation(r);
   }
-  linkReservationCustomers();
-  if(registerCustomers)processCustomersFromReservations();
   saveState();
   renderAll();
+}
+
+function initReservationListEvents(){
+  const el=document.getElementById("reservation-list");
+  if(!el||el.dataset.nameEditReady)return;
+  el.dataset.nameEditReady="1";
+  el.addEventListener("click",e=>{
+    const editBtn=e.target.closest(".name-edit-btn");
+    if(editBtn){
+      const resId=parseInt(editBtn.dataset.resId,10);
+      const r=state.reservations.find(x=>x.id===resId);
+      if(!r)return;
+      editingNameReservationId=resId;
+      nameEditSelectedCustomerId=r.linkedCustomerId||null;
+      nameEditQuery[resId]=r.guestDisplayName||r.customerName||"";
+      nameEditNewMode[resId]=false;
+      renderReservations();
+      return;
+    }
+    const pickBtn=e.target.closest(".name-pick-item");
+    if(pickBtn){
+      nameEditSelectedCustomerId=parseInt(pickBtn.dataset.cid,10);
+      nameEditNewMode[parseInt(pickBtn.dataset.resId,10)]=false;
+      renderReservations();
+      return;
+    }
+    const newBtn=e.target.closest(".name-edit-new-btn");
+    if(newBtn){
+      const resId=parseInt(newBtn.dataset.resId,10);
+      nameEditNewMode[resId]=true;
+      nameEditSelectedCustomerId=null;
+      renderReservations();
+      return;
+    }
+    const saveBtn=e.target.closest(".name-edit-save-btn");
+    if(saveBtn){
+      saveReservationNameConfirm(parseInt(saveBtn.dataset.resId,10));
+    }
+  });
+  el.addEventListener("input",e=>{
+    const input=e.target.closest(".name-edit-input");
+    if(!input)return;
+    const resId=parseInt(input.dataset.resId,10);
+    nameEditQuery[resId]=input.value;
+    nameEditSelectedCustomerId=null;
+    nameEditNewMode[resId]=false;
+    const resultsEl=el.querySelector(`.name-edit-results[data-res-id="${resId}"]`);
+    const r=state.reservations.find(x=>x.id===resId);
+    if(resultsEl&&r&&r.type==="本指名"&&!r.customerLinked){
+      resultsEl.innerHTML=buildNameEditResultsHtml(r,input.value.trim());
+    }
+  });
 }
 
 function switchTab(screenId){
@@ -1654,7 +1913,7 @@ document.querySelectorAll(".tab-item").forEach(tab=>{
   });
 });
 
-document.getElementById("btn-load").addEventListener("click",()=>loadSchedule(true));
+document.getElementById("btn-load").addEventListener("click",()=>loadSchedule());
 document.getElementById("btn-manual-add").addEventListener("click",addManualReservation);
 document.getElementById("manual-type").addEventListener("change",updateManualFormVisibility);
 document.getElementById("manual-location").addEventListener("change",updateManualFormVisibility);
@@ -1692,13 +1951,13 @@ document.getElementById("customer-modal").addEventListener("click",e=>{
 
 const loaded=loadState();
 initManualReservationForm();
-linkReservationCustomers();
+initReservationListEvents();
 const scheduleInput=document.getElementById("schedule-input");
 if(!loaded&&!scheduleInput.value.trim()){
   scheduleInput.value=SAMPLE_TEXT;
-  loadSchedule(false);
+  loadSchedule();
 }else if(scheduleInput.value.trim()&&!state.reservations.length){
-  loadSchedule(false);
+  loadSchedule();
 }
 restoreActiveTab();
 renderAll();
