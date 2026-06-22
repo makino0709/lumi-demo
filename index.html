@@ -43,7 +43,6 @@ body{
   padding:52px 20px 16px;
   text-align:center;
   background:linear-gradient(180deg,rgba(255,255,255,.95) 0%,transparent 100%);
-  position:sticky;top:0;z-index:10;
 }
 .logo{
   font-size:28px;font-weight:700;letter-spacing:.08em;
@@ -94,6 +93,9 @@ body{
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .grid-2 .card{margin-bottom:0;padding:16px}
 .grid-2 .card-value{font-size:28px}
+.home-rank-grid{margin-bottom:14px}
+.home-progress-card{grid-column:1/-1;padding:14px 20px}
+.home-progress-card .progress-bar{margin-top:0}
 .section-title{font-size:15px;font-weight:700;margin:20px 0 12px;color:var(--text);display:flex;align-items:center;gap:8px}
 .section-title::before{content:"";width:4px;height:16px;background:linear-gradient(var(--pink),var(--gold));border-radius:2px}
 .tab-bar{
@@ -260,7 +262,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   padding:4px 12px;border-radius:20px;
 }
 .progress-bar{
-  height:6px;background:rgba(255,107,157,.12);border-radius:3px;margin-top:10px;overflow:hidden;
+  height:6px;background:rgba(255,107,157,.12);border-radius:3px;overflow:hidden;
 }
 .progress-fill{
   height:100%;border-radius:3px;
@@ -284,7 +286,7 @@ input[type="number"]{padding-left:28px}
 
   <!-- ホーム -->
   <section id="screen-home" class="screen active">
-    <div class="grid-2">
+    <div class="grid-2 home-rank-grid">
       <div class="card" style="text-align:center">
         <div class="card-title">現在ランク</div>
         <div class="card-value gold" id="home-current-rank">S2</div>
@@ -304,10 +306,10 @@ input[type="number"]{padding-left:28px}
         <div class="card-value sm" id="home-next-remaining">—</div>
         <div class="card-note" id="home-next-target"></div>
       </div>
-    </div>
-    <div class="card" style="padding:14px 20px">
-      <div class="progress-bar"><div class="progress-fill" id="home-progress" style="width:0%"></div></div>
-      <div class="card-note" id="home-progress-label" style="text-align:center;margin-top:8px;font-weight:600;color:var(--text)">—</div>
+      <div class="card home-progress-card">
+        <div class="progress-bar"><div class="progress-fill" id="home-progress" style="width:0%"></div></div>
+        <div class="card-note" id="home-progress-label" style="text-align:center;margin-top:8px;font-weight:600;color:var(--text)">—</div>
+      </div>
     </div>
     <div class="card" style="text-align:center;margin-bottom:14px">
       <div class="card-title">今日の予定</div>
@@ -1262,13 +1264,82 @@ function opsFromKeys(keys){
   return OPS.filter(op=>keys.includes(op.key)&&!seen.has(op.key)&&seen.add(op.key)).map(op=>({...op}));
 }
 
-function rebuildReservationRawText(r){
-  const lines=[r.timeStr+"　"+r.type+"　"+r.durationLabel+"　"+r.location];
+function formatSchedulePasteTime(r){
+  let min=r.timeMin;
+  if(min==null)min=parseTimeStr(r.timeStr);
+  if(min==null)return r.timeStr||"";
+  const h=Math.floor(min/60),mn=min%60;
+  const mnStr=String(mn).padStart(2,"0");
+  if(h>=10&&h<=23)return h+"時"+mnStr+"分";
+  if(h===24)return "24時"+mnStr+"分";
+  if(h>=25)return "翌"+(h-24)+"時"+mnStr+"分";
+  if(h>=0&&h<=9)return "翌"+h+"時"+mnStr+"分";
+  return h+"時"+mnStr+"分";
+}
+
+function formatReservationPasteDuration(r){
+  if(r.extensionMin>0)return r.duration+"+"+r.extensionMin+"分";
+  return r.durationLabel||r.duration+"分";
+}
+
+function isManualReservation(r){
+  return r.source==="manual";
+}
+
+function formatReservationPasteBlock(r){
+  const lines=[formatSchedulePasteTime(r)+"　"+r.type+"　"+formatReservationPasteDuration(r)+"　"+r.location];
+  const shopName=(r.customerName||"").replace(/様$/,"");
+  const displayName=(r.guestDisplayName||shopName).replace(/様$/,"");
+  if(r.type==="本指名"&&shopName){
+    lines.push("※本指名"+shopName+"様");
+  }else if(displayName){
+    lines.push("※"+displayName+"様");
+  }
   if(r.ops&&r.ops.length)lines.push("※"+r.ops.map(o=>o.key).join("　"));
-  const name=r.guestDisplayName||r.customerName;
-  if(name)lines.push("※"+name.replace(/様$/,"")+"様");
-  if(r.memo)lines.push("※"+r.memo.replace(/\n/g,"　"));
+  if(isManualReservation(r))lines.push("※手入力追加");
   return lines.join("\n");
+}
+
+function getScheduleDateHeader(dateId){
+  if(dateId===getTodayBizId())return"本日の予約状況です！";
+  if(dateId===getTomorrowBizId())return"明日の予約";
+  const parts=dateId.split("-").map(Number);
+  return parts[1]+"/"+parts[2]+"の予約";
+}
+
+function regenerateScheduleText(){
+  const dateIds=getAllScheduleDateIds().filter(id=>(getReservationsForDate(id).length>0)).sort();
+  if(!dateIds.length)return"";
+  const sections=[];
+  for(const dateId of dateIds){
+    const reservations=[...getReservationsForDate(dateId)];
+    reservations.sort((a,b)=>(a.timeMin??0)-(b.timeMin??0));
+    const blocks=[getScheduleDateHeader(dateId)];
+    for(const r of reservations){
+      blocks.push("");
+      if(r.cancelled){
+        blocks.push("【キャンセル】\n"+formatReservationPasteBlock(r));
+      }else{
+        blocks.push(formatReservationPasteBlock(r));
+      }
+    }
+    sections.push(blocks.join("\n"));
+  }
+  return sections.join("\n\n");
+}
+
+function syncScheduleInputFromReservations(){
+  const ta=document.getElementById("schedule-input");
+  if(!ta)return;
+  ta.value=regenerateScheduleText();
+}
+
+function notifyReservationListChanged(){
+  syncScheduleInputFromReservations();
+}
+
+function rebuildReservationRawText(r){
+  return formatReservationPasteBlock(r);
 }
 
 function findReservationDateId(resId){
@@ -1283,6 +1354,7 @@ function deleteReservationById(resId){
   if(!dateId)return;
   state.reservationsByDate[dateId]=(state.reservationsByDate[dateId]||[]).filter(r=>r.id!==resId);
   delete reservationTabs[resId];
+  notifyReservationListChanged();
   saveState();
 }
 
@@ -1377,6 +1449,7 @@ function saveReservationEdit(){
   if(dateId)sortReservationsForDate(dateId);
   editingReservationId=null;
   document.getElementById("reservation-edit-modal").classList.remove("show");
+  notifyReservationListChanged();
   saveState();
   renderAll();
 }
@@ -1385,6 +1458,7 @@ function toggleReservationCancelled(resId){
   const r=findReservationById(resId);
   if(!r)return;
   r.cancelled=!r.cancelled;
+  notifyReservationListChanged();
   saveState();
   renderAll();
 }
@@ -1412,6 +1486,10 @@ function migrateReservation(r){
   if(r.linkedCustomerId==null)r.linkedCustomerId=r.customerId||null;
   if(r.customerLinked&&!r.linkedCustomerId)r.customerLinked=false;
   if(r.locationType==null)r.locationType=inferLocationType(r.location);
+  if(r.manualAdded==null)r.manualAdded=!!(r.rawText&&r.rawText.includes("手入力追加"));
+  if(r.source==null){
+    r.source=(r.manualAdded||r.rawText&&r.rawText.includes("手入力追加"))?"manual":"paste";
+  }
 }
 
 function escAttr(s){
@@ -1517,12 +1595,16 @@ function linkReservationToCustomer(r,customerId,displayName,shopName){
   r.linkedCustomerId=customer.id;
   r.guestDisplayName=displayName||customer.displayName;
   r.customerName=shopName||customer.shopName;
+  r.rawText=rebuildReservationRawText(r);
+  notifyReservationListChanged();
   saveState();
   return true;
 }
 
 function saveReservationGuestName(r,name){
   r.guestDisplayName=(name||"").trim();
+  r.rawText=rebuildReservationRawText(r);
+  notifyReservationListChanged();
   saveState();
 }
 
@@ -1699,6 +1781,8 @@ function createManualReservation(timeClock,type,duration,location,shopName,opKey
     tip:0,
     memo:"",
     cancelled:false,
+    manualAdded:true,
+    source:"manual",
     rawText:blockText
   };
 }
@@ -1761,8 +1845,6 @@ function addManualReservation(){
   const dateId=getSelectedScheduleDateId();
   getReservationsForDate(dateId).push(reservation);
   sortReservationsForDate(dateId);
-  const ta=document.getElementById("schedule-input");
-  ta.value=(ta.value.trim()?ta.value.trim()+"\n\n":"")+blockText;
   if(type==="本指名"&&linkedCustomer){
     reservation.guestDisplayName=linkedCustomer.displayName;
     linkReservationToCustomer(reservation,linkedCustomer.id,linkedCustomer.displayName,linkedCustomer.shopName);
@@ -1771,6 +1853,7 @@ function addManualReservation(){
   const searchInput=document.getElementById("manual-customer-search");
   if(searchInput)searchInput.value="";
   document.querySelectorAll("#manual-op-list input[type=checkbox]").forEach(el=>{el.checked=false});
+  notifyReservationListChanged();
   saveState();
   renderAll();
 }
@@ -1820,6 +1903,7 @@ function parseReservationBlock(line,lines,startIdx){
       tip:0,
       memo:"",
       cancelled:false,
+      source:"paste",
       rawText:fullText.trim()
     },
     nextIdx:i
@@ -1871,18 +1955,173 @@ function mergeReservationMeta(oldList,newList){
   for(const r of newList){
     const old=oldMeta.get(reservationHonKey(r));
     if(!old)continue;
-    if(old.tip)r.tip=old.tip;
+    if(old.tip&&!(r.tip>0))r.tip=old.tip;
     if(old.extensionMin)r.extensionMin=old.extensionMin;
-    if(old.guestDisplayName)r.guestDisplayName=old.guestDisplayName;
+    if(old.guestDisplayName&&!r.guestDisplayName)r.guestDisplayName=old.guestDisplayName;
     if(old.customerLinked){
       r.customerLinked=old.customerLinked;
       r.linkedCustomerId=old.linkedCustomerId;
     }
-    if(old.memo)r.memo=old.memo;
+    if(old.memo&&!r.memo)r.memo=old.memo;
+    else if(old.memo&&r.memo&&r.memo.indexOf(old.memo)<0)r.memo=r.memo+"\n"+old.memo;
     if(old.cancelled)r.cancelled=old.cancelled;
     migrateReservation(r);
   }
   return newList;
+}
+
+function reservationTimeMin(r){
+  if(r.timeMin!=null)return r.timeMin;
+  return parseTimeStr(r.timeStr);
+}
+
+function normalizeCustomerNameForMatch(name){
+  return String(name||"").replace(/本指名/g,"").replace(/様$/,"").trim();
+}
+
+function reservationCustomerNames(r){
+  const names=new Set();
+  const shop=normalizeCustomerNameForMatch(r.customerName);
+  const display=normalizeCustomerNameForMatch(r.guestDisplayName);
+  if(shop)names.add(shop);
+  if(display)names.add(display);
+  return names;
+}
+
+function isSameCustomerIdentity(a,b){
+  const namesA=reservationCustomerNames(a);
+  const namesB=reservationCustomerNames(b);
+  if(!namesA.size||!namesB.size)return false;
+  for(const na of namesA){
+    for(const nb of namesB){
+      if(na===nb)return true;
+    }
+  }
+  return false;
+}
+
+function isSameCourse(a,b){
+  return a.duration===b.duration;
+}
+
+function isSameLocation(a,b){
+  return(a.location||"")===(b.location||"");
+}
+
+function isTimeExact(a,b){
+  const ta=reservationTimeMin(a),tb=reservationTimeMin(b);
+  return ta!=null&&tb!=null&&ta===tb;
+}
+
+function isTimeWithin30(a,b){
+  const ta=reservationTimeMin(a),tb=reservationTimeMin(b);
+  return ta!=null&&tb!=null&&Math.abs(ta-tb)<=30;
+}
+
+function findManualMatchForPaste(manualList,pasteRes,usedManualIds){
+  const available=manualList.filter(m=>!usedManualIds.has(m.id));
+  const tryFind=pred=>available.find(pred);
+
+  let match=tryFind(m=>isTimeExact(m,pasteRes)&&isSameCourse(m,pasteRes)&&isSameLocation(m,pasteRes));
+  if(match)return match;
+
+  match=tryFind(m=>isTimeWithin30(m,pasteRes)&&isSameCourse(m,pasteRes)&&isSameLocation(m,pasteRes));
+  if(match)return match;
+
+  if(pasteRes.type==="本指名"){
+    match=tryFind(m=>m.type==="本指名"&&isTimeWithin30(m,pasteRes)&&isSameCourse(m,pasteRes)&&isSameCustomerIdentity(m,pasteRes));
+    if(match)return match;
+  }
+
+  match=tryFind(m=>isSameLocation(m,pasteRes)&&isSameCourse(m,pasteRes)&&isTimeWithin30(m,pasteRes));
+  return match||null;
+}
+
+function mergeReservationOps(manualOps,pasteOps){
+  const seen=new Set();
+  const merged=[];
+  for(const op of [...(manualOps||[]),...(pasteOps||[])]){
+    if(!seen.has(op.key)){
+      seen.add(op.key);
+      merged.push({...op});
+    }
+  }
+  return merged;
+}
+
+function mergeReservationMemos(manualMemo,pasteMemo){
+  const m=String(manualMemo||"").trim();
+  const p=String(pasteMemo||"").trim();
+  if(!m)return p;
+  if(!p)return m;
+  if(m.indexOf(p)>=0)return m;
+  if(p.indexOf(m)>=0)return m;
+  return m+"\n"+p;
+}
+
+function mergeManualWithPaste(manual,paste){
+  const merged={
+    id:manual.id,
+    timeStr:paste.timeStr,
+    timeMin:paste.timeMin,
+    type:paste.type,
+    duration:paste.duration,
+    serviceMin:paste.serviceMin,
+    durationLabel:paste.durationLabel,
+    location:paste.location,
+    locationType:paste.locationType,
+    customerName:paste.customerName||manual.customerName,
+    guestDisplayName:paste.guestDisplayName||manual.guestDisplayName,
+    customerLinked:manual.customerLinked,
+    linkedCustomerId:manual.linkedCustomerId,
+    ops:mergeReservationOps(manual.ops,paste.ops),
+    extensionMin:manual.extensionMin||0,
+    tip:(manual.tip>0)?manual.tip:(paste.tip||0),
+    memo:mergeReservationMemos(manual.memo,paste.memo),
+    cancelled:manual.cancelled,
+    manualAdded:manual.manualAdded,
+    source:"paste",
+    rawText:paste.rawText
+  };
+  migrateReservation(merged);
+  return merged;
+}
+
+function replaceReservationsFromPaste(dateId,parsedList){
+  const oldList=getReservationsForDate(dateId);
+  oldList.forEach(migrateReservation);
+
+  const keptCancelled=oldList.filter(r=>r.cancelled);
+  const oldManual=oldList.filter(r=>r.source==="manual"&&!r.cancelled);
+  const oldPasteReplaced=oldList.filter(r=>r.source==="paste"&&!r.cancelled);
+
+  const usedManualIds=new Set();
+  const mergedFromManual=[];
+  const newFromPaste=[];
+
+  for(const pasteRes of parsedList){
+    pasteRes.source="paste";
+    migrateReservation(pasteRes);
+    const manualMatch=findManualMatchForPaste(oldManual,pasteRes,usedManualIds);
+    if(manualMatch){
+      usedManualIds.add(manualMatch.id);
+      mergedFromManual.push(mergeManualWithPaste(manualMatch,pasteRes));
+    }else{
+      newFromPaste.push(pasteRes);
+    }
+  }
+
+  const unmatchedManual=oldManual.filter(m=>!usedManualIds.has(m.id));
+  mergeReservationMeta(oldPasteReplaced,newFromPaste);
+  mergeReservationMeta(oldPasteReplaced,mergedFromManual);
+
+  state.reservationsByDate[dateId]=[
+    ...keptCancelled,
+    ...mergedFromManual,
+    ...unmatchedManual,
+    ...newFromPaste
+  ];
+  sortReservationsForDate(dateId);
 }
 
 function parseReservations(text){
@@ -2152,7 +2391,13 @@ function renderReservations(){
       const id=parseInt(btn.dataset.id,10);
       const min=parseInt(btn.dataset.min,10);
       const r=findReservationById(id);
-      if(r&&!r.cancelled){r.extensionMin+=min;saveState();renderAll()}
+      if(r&&!r.cancelled){
+        r.extensionMin+=min;
+        r.rawText=rebuildReservationRawText(r);
+        notifyReservationListChanged();
+        saveState();
+        renderAll();
+      }
     });
   });
 }
@@ -2317,10 +2562,10 @@ function showCustomerModal(shopName,matches,onResolved){
 function loadSchedule(){
   const text=document.getElementById("schedule-input").value.trim();
   if(!text)return;
+  updateReservationIdSeq();
   const parsed=parseScheduleByDate(text);
   for(const dateId of Object.keys(parsed)){
-    const oldList=getReservationsForDate(dateId);
-    state.reservationsByDate[dateId]=mergeReservationMeta(oldList,parsed[dateId]);
+    replaceReservationsFromPaste(dateId,parsed[dateId]);
   }
   const parsedDates=Object.keys(parsed).sort();
   if(parsedDates.length&&!parsedDates.includes(getSelectedScheduleDateId())){
@@ -2413,6 +2658,7 @@ document.getElementById("btn-cancel-reservation-edit").addEventListener("click",
   const r=findReservationById(editingReservationId);
   if(r){
     r.cancelled=!r.cancelled;
+    notifyReservationListChanged();
     saveState();
   }
   editingReservationId=null;
